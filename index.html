@@ -1,769 +1,1894 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Yeeps-Inspired VR Sandbox</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #050510;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #0ff;
-            user-select: none;
-        }
-        canvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-        }
-        #ui-layer {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 10;
-            background: rgba(0, 15, 30, 0.85);
-            padding: 20px;
-            border: 2px solid #0ff;
-            border-radius: 12px;
-            box-shadow: 0 0 15px #0ff, inset 0 0 10px #0ff;
-            backdrop-filter: blur(5px);
-            width: 300px;
-            pointer-events: auto;
-        }
-        h2 {
-            margin: 0 0 15px 0;
-            font-size: 1.5rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-align: center;
-            text-shadow: 0 0 5px #0ff;
-        }
-        .status { margin-bottom: 15px; font-size: 0.9rem; word-break: break-all; }
-        .peer-id { font-weight: bold; color: #f0f; text-shadow: 0 0 5px #f0f; font-size: 1.1rem; }
-        
-        input[type="text"] {
-            width: calc(100% - 22px);
-            background: rgba(0, 0, 0, 0.5);
-            color: #fff;
-            border: 1px solid #0ff;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 6px;
-            outline: none;
-        }
-        input[type="text"]:focus { box-shadow: 0 0 8px #0ff; }
-        
-        button {
-            width: 100%;
-            background: transparent;
-            color: #0ff;
-            border: 2px solid #0ff;
-            padding: 10px;
-            margin-bottom: 10px;
-            font-weight: bold;
-            text-transform: uppercase;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        button:hover {
-            background: #0ff;
-            color: #000;
-            box-shadow: 0 0 10px #0ff;
-        }
-        
-        #controls-info {
-            font-size: 0.8rem;
-            color: #aaa;
-            margin-top: 15px;
-            line-height: 1.4;
-            border-top: 1px solid rgba(0, 255, 255, 0.3);
-            padding-top: 10px;
-        }
-        .highlight { color: #0ff; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>VOIDFRAME VR — Digital Collapse</title>
+<style>
+  /* No external font deps — system monospace stack */
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --neon:#00ffe7;--neon2:#ff2d78;--neon3:#7c3aff;
+    --dark:#04060a;--mid:#0a0f1a;
+    --panel:rgba(0,255,231,0.07);--border:rgba(0,255,231,0.22);
+    --text:#c8f0ea;--warn:#ff2d78;--gold:#ffd600;
+  }
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Courier New',Courier,monospace}
+  canvas{display:block;width:100%;height:100%}
 
-        /* Crosshair for desktop */
-        #crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 10px;
-            height: 10px;
-            background: transparent;
-            border: 2px solid #0ff;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 5;
-            pointer-events: none;
-            display: none;
-        }
-    </style>
-    <!-- PeerJS for WebRTC Multiplayer -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    
-    <!-- Import Maps for Three.js and Cannon-es -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
-            }
-        }
-    </script>
+  /* ── FLAT UI (desktop / pre-VR) ──────────────────────── */
+  #loading{position:fixed;inset:0;background:#000;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .load-logo{font-family:'Orbitron',monospace;font-size:clamp(28px,6vw,64px);font-weight:900;letter-spacing:8px;color:#fff;text-shadow:0 0 40px var(--neon);margin-bottom:40px}
+  .load-bar-wrap{width:min(380px,80vw);height:3px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden}
+  .load-bar{height:100%;background:linear-gradient(90deg,var(--neon3),var(--neon));width:0;transition:width .15s;border-radius:2px}
+  .load-status{font-size:11px;color:var(--neon);letter-spacing:3px;margin-top:14px;opacity:.7;text-align:center;padding:0 20px}
+
+  #main-menu{position:fixed;inset:0;background:var(--dark);z-index:200;display:none;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+  .menu-bg{position:absolute;inset:0;background:radial-gradient(ellipse at 30% 50%,rgba(124,58,255,.18),transparent 60%),radial-gradient(ellipse at 70% 30%,rgba(0,255,231,.1),transparent 50%)}
+  .menu-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(0,255,231,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,231,.04) 1px,transparent 1px);background-size:44px 44px;animation:gridmove 22s linear infinite}
+  @keyframes gridmove{from{background-position:0 0}to{background-position:44px 44px}}
+  .scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--neon),transparent);opacity:.4;animation:scandown 4s linear infinite}
+  @keyframes scandown{from{top:-2px}to{top:100%}}
+  .corner{position:absolute;width:50px;height:50px;border-color:var(--neon);border-style:solid;opacity:.25}
+  .corner.tl{top:16px;left:16px;border-width:2px 0 0 2px}
+  .corner.tr{top:16px;right:16px;border-width:2px 2px 0 0}
+  .corner.bl{bottom:16px;left:16px;border-width:0 0 2px 2px}
+  .corner.br{bottom:16px;right:16px;border-width:0 2px 2px 0}
+
+  .menu-title{position:relative;text-align:center;margin-bottom:10px;z-index:2}
+  .menu-title h1{font-family:'Orbitron',monospace;font-size:clamp(32px,5.5vw,68px);font-weight:900;letter-spacing:8px;color:#fff;text-shadow:0 0 40px var(--neon),0 0 80px rgba(0,255,231,.25);animation:flicker 5s ease-in-out infinite}
+  @keyframes flicker{0%,88%,100%{opacity:1}90%{opacity:.7}92%{opacity:1}95%{opacity:.6}}
+  .menu-title .sub{font-family:'Rajdhani',sans-serif;font-size:13px;letter-spacing:12px;color:var(--neon);opacity:.65;text-transform:uppercase;margin-top:6px}
+  .menu-title .ver{font-size:9px;color:rgba(255,255,255,.25);margin-top:10px;letter-spacing:3px}
+  .menu-btns{display:flex;flex-direction:column;gap:10px;margin-top:36px;z-index:2;width:min(320px,90vw)}
+  .mbtn{font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;letter-spacing:4px;padding:14px 28px;border:1.5px solid var(--border);background:var(--panel);color:#fff;cursor:pointer;text-transform:uppercase;position:relative;overflow:hidden;transition:all .2s;backdrop-filter:blur(8px)}
+  .mbtn::before{content:'';position:absolute;left:-100%;top:0;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,255,231,.12),transparent);transition:left .4s}
+  .mbtn:hover::before{left:100%}
+  .mbtn:hover,.mbtn:focus{border-color:var(--neon);color:var(--neon);box-shadow:0 0 18px rgba(0,255,231,.18);outline:none}
+  .mbtn.primary{border-color:var(--neon);color:var(--neon)}
+  .mbtn.vr-btn{border-color:#7c3aff;color:#b084ff;font-size:15px}
+  .mbtn.vr-btn:hover{border-color:#b084ff;color:#fff}
+  .mbtn.danger{border-color:var(--warn);color:var(--warn)}
+  .menu-hint{position:absolute;bottom:16px;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.2);text-align:center;z-index:2;padding:0 20px}
+
+  /* Desktop HUD (hidden in XR) */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10;display:none}
+  .hcorner{position:absolute;padding:14px 18px}
+  #htl{top:0;left:0} #htr{top:0;right:0;text-align:right}
+  #hbl{bottom:0;left:0} #hbr{bottom:0;right:0;text-align:right}
+  .hlabel{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:3px;color:var(--neon);opacity:.55;text-transform:uppercase}
+  .hval{font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:#fff;line-height:1}
+  .sbar{width:110px;height:3px;background:rgba(255,255,255,.1);border-radius:2px;margin-top:5px;overflow:hidden}
+  .sfill{height:100%;border-radius:2px;transition:width .3s}
+  #hpf{background:linear-gradient(90deg,var(--warn),#ff6b35);width:100%}
+  #enf{background:linear-gradient(90deg,var(--neon3),var(--neon));width:100%}
+  #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:11;display:none}
+  .chl{position:absolute;background:rgba(255,255,255,.8);border-radius:2px}
+  .chh{width:14px;height:1.5px;top:50%;left:50%;transform:translate(-50%,-50%)}
+  .chv{width:1.5px;height:14px;top:50%;left:50%;transform:translate(-50%,-50%)}
+  .chd{width:3px;height:3px;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--neon)}
+  #hotbar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:none;gap:6px;pointer-events:none;z-index:11}
+  .hslot{width:50px;height:50px;border:1.5px solid var(--border);background:var(--panel);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:18px;position:relative;backdrop-filter:blur(6px)}
+  .hslot.active{border-color:var(--neon);box-shadow:0 0 10px var(--neon)}
+  .hslot .sn{position:absolute;top:2px;left:4px;font-size:8px;color:var(--neon);opacity:.7}
+
+  /* Notifications */
+  #notifs{position:fixed;top:16px;right:16px;z-index:200;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  .notif{background:var(--mid);border:1px solid var(--border);border-left:3px solid var(--neon);padding:9px 14px;font-size:11px;color:#fff;min-width:220px;animation:nsin .3s ease,nsout .3s ease 2.7s forwards}
+  .notif.warn{border-left-color:var(--warn)}
+  .notif.gold{border-left-color:var(--gold);color:var(--gold)}
+  @keyframes nsin{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+  @keyframes nsout{to{transform:translateX(110%);opacity:0}}
+
+  /* Glitch */
+  #glitch{position:fixed;inset:0;pointer-events:none;z-index:6;display:none}
+  #glitch.on{display:block;animation:glitchanim .2s steps(1) 3}
+  @keyframes glitchanim{
+    0%{background:rgba(255,45,120,.04);clip-path:inset(15% 0 75% 0)}
+    33%{background:rgba(0,255,231,.04);clip-path:inset(55% 0 25% 0)}
+    66%{background:rgba(124,58,255,.04);clip-path:inset(35% 0 45% 0)}
+  }
+  .scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.04) 0,rgba(0,0,0,.04) 1px,transparent 1px,transparent 2px);pointer-events:none;z-index:5}
+
+  /* Zone flash */
+  #zonename{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Orbitron',monospace;font-size:clamp(20px,4vw,40px);letter-spacing:8px;color:#fff;text-shadow:0 0 40px var(--neon);pointer-events:none;z-index:14;opacity:0;transition:opacity 1.2s;text-align:center}
+  #zonename.show{opacity:1}
+
+  /* Dialog */
+  #dialog{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);width:min(660px,92vw);background:rgba(4,6,10,.94);border:1px solid var(--border);padding:18px 22px;z-index:50;display:none;backdrop-filter:blur(14px)}
+  #dialog::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--neon),transparent)}
+  #dialog.show{display:block}
+  .dname{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:3px;color:var(--neon);margin-bottom:8px}
+  .dtext{font-family:'Rajdhani',sans-serif;font-size:15px;color:#fff;line-height:1.5}
+  .dcont{font-size:9px;color:rgba(255,255,255,.35);margin-top:10px;letter-spacing:2px;animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* VR entry indicator */
+  #vr-status{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);font-size:10px;letter-spacing:3px;color:rgba(124,58,255,.7);pointer-events:none;z-index:15;display:none}
+</style>
 </head>
 <body>
-    <div id="ui-layer">
-        <h2>VR Sandbox</h2>
-        <div class="status">Your ID: <br><span id="my-id" class="peer-id">Connecting...</span></div>
-        <div class="status">Status: <span id="conn-status" style="color:#ff0">Offline</span></div>
-        
-        <input type="text" id="friend-id" placeholder="Enter Host ID to Join">
-        <button id="join-btn">Join Lobby</button>
-        <button id="desktop-play-btn">Play (Desktop)</button>
-        
-        <div id="controls-info">
-            <strong>Desktop:</strong> WASD to move, Space to Jump. Click to lock mouse. Left Click to Spawn Box, Right Click to Grab.<br><br>
-            <strong>VR:</strong> Left Stick to Move/Jump. Right Stick to Turn. Right Trigger to Spawn. Grip to Grab.
-        </div>
-    </div>
-    <div id="crosshair"></div>
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { VRButton } from 'three/addons/webxr/VRButton.js';
-        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-        import * as CANNON from 'cannon-es';
+<div class="scanlines"></div>
+<div id="glitch"></div>
 
-        // ==========================================
-        // 1. ENGINE & GRAPHICS SETUP
-        // ==========================================
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a1a);
-        scene.fog = new THREE.Fog(0x0a0a1a, 10, 100);
+<!-- Loading -->
+<div id="loading">
+  <div class="load-logo">VOIDFRAME</div>
+  <div class="load-bar-wrap"><div class="load-bar" id="lbar"></div></div>
+  <div class="load-status" id="lstatus">INITIALIZING...</div>
+</div>
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // VR Locomotion Group
-        const userGroup = new THREE.Group();
-        userGroup.position.set(0, 1.6, 0); // Start position
-        scene.add(userGroup);
-        userGroup.add(camera);
+<!-- Main Menu -->
+<div id="main-menu">
+  <div class="menu-bg"></div>
+  <div class="menu-grid"></div>
+  <div class="scan-line"></div>
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+  <div class="menu-title">
+    <h1>VOIDFRAME</h1>
+    <div class="sub">Digital Collapse</div>
+    <div class="ver">WebXR EDITION — Quest 2 / 3</div>
+  </div>
+  <div class="menu-btns">
+    <button class="mbtn primary" onclick="startMode('story')">▶ STORY MODE</button>
+    <button class="mbtn" onclick="startMode('sandbox')">🔧 SANDBOX</button>
+    <button class="mbtn" onclick="startMode('arena')">⚔ COMBAT ARENA</button>
+    <button class="mbtn" onclick="startMode('debug')">⚠ PHYSICS LAB</button>
+    <button class="mbtn vr-btn" id="vr-enter-btn" onclick="enterVR()">🥽 ENTER VR — QUEST 2/3</button>
+  </div>
+  <div class="menu-hint">PUT ON YOUR QUEST &amp; CLICK "ENTER VR" — or play in desktop mode</div>
+</div>
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.xr.enabled = true;
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        document.body.appendChild(renderer.domElement);
-        document.body.appendChild(VRButton.createButton(renderer));
+<!-- Game Canvas (Three.js target) -->
+<canvas id="c"></canvas>
 
-        // Lighting
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x4444ff, 0.4);
-        scene.add(hemiLight);
-        
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(20, 50, 20);
-        dirLight.castShadow = true;
-        dirLight.shadow.camera.top = 50;
-        dirLight.shadow.camera.bottom = -50;
-        dirLight.shadow.camera.left = -50;
-        dirLight.shadow.camera.right = 50;
-        dirLight.shadow.mapSize.width = 2048;
-        dirLight.shadow.mapSize.height = 2048;
-        scene.add(dirLight);
+<!-- Desktop HUD -->
+<div id="hud">
+  <div class="hcorner" id="htl">
+    <div class="hlabel">HEALTH</div>
+    <div class="hval" id="hpv">100</div>
+    <div class="sbar"><div class="sfill" id="hpf"></div></div>
+    <div class="hlabel" style="margin-top:9px">ENERGY</div>
+    <div class="hval" id="env">100</div>
+    <div class="sbar"><div class="sfill" id="enf"></div></div>
+  </div>
+  <div class="hcorner" id="htr">
+    <div class="hlabel">ZONE</div>
+    <div class="hval" id="zonev" style="font-size:13px;color:var(--neon);font-family:'Rajdhani',sans-serif">—</div>
+    <div class="hlabel" style="margin-top:7px">SCORE</div>
+    <div class="hval" id="scorev">0</div>
+  </div>
+  <div class="hcorner" id="hbl">
+    <div class="hlabel">WEAPON</div>
+    <div class="hval" id="weapv" style="font-size:14px;font-family:'Rajdhani',sans-serif">GRAVITY GUN</div>
+    <div class="hlabel" style="margin-top:4px">AMMO</div>
+    <div class="hval" id="ammov" style="color:var(--neon)">∞</div>
+  </div>
+  <div class="hcorner" id="hbr">
+    <div class="hlabel">KILLS</div>
+    <div class="hval" id="killsv">0</div>
+    <div class="hlabel" style="margin-top:7px">TIME</div>
+    <div class="hval" id="timev" style="font-size:15px">00:00</div>
+  </div>
+</div>
 
-        // Grid/Environment
-        const gridHelper = new THREE.GridHelper(200, 100, 0x00ffff, 0x003333);
-        gridHelper.position.y = 0.01;
-        scene.add(gridHelper);
+<div id="crosshair"><div class="chl chh"></div><div class="chl chv"></div><div class="chl chd"></div></div>
+<div id="hotbar">
+  <div class="hslot active" id="s0"><span class="sn">1</span>🧲</div>
+  <div class="hslot" id="s1"><span class="sn">2</span>🔫</div>
+  <div class="hslot" id="s2"><span class="sn">3</span>💥</div>
+  <div class="hslot" id="s3"><span class="sn">4</span>🎯</div>
+  <div class="hslot" id="s4"><span class="sn">5</span>💣</div>
+  <div class="hslot" id="s5"><span class="sn">6</span>⚔</div>
+</div>
 
-        // ==========================================
-        // 2. PHYSICS SETUP (CANNON-ES)
-        // ==========================================
-        const world = new CANNON.World({
-            gravity: new CANNON.Vec3(0, -15, 0), // Snappy gravity
-        });
-        world.broadphase = new CANNON.SAPBroadphase(world);
-        world.solver.iterations = 10;
+<!-- Notifications -->
+<div id="notifs"></div>
 
-        // Physics Materials
-        const physicsMaterial = new CANNON.Material("standard");
-        const physicsContactMaterial = new CANNON.ContactMaterial(physicsMaterial, physicsMaterial, {
-            friction: 0.1,
-            restitution: 0.2
-        });
-        world.addContactMaterial(physicsContactMaterial);
+<!-- Zone flash -->
+<div id="zonename"></div>
 
-        // Ground Physics
-        const groundBody = new CANNON.Body({
-            type: CANNON.Body.STATIC,
-            shape: new CANNON.Plane(),
-            material: physicsMaterial
-        });
-        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-        world.addBody(groundBody);
+<!-- Dialog -->
+<div id="dialog">
+  <div class="dname" id="dname">VOID_AI</div>
+  <div class="dtext" id="dtext"></div>
+  <div class="dcont">[CLICK / TRIGGER TO CONTINUE]</div>
+</div>
 
-        // Visual Ground
-        const groundGeo = new THREE.PlaneGeometry(200, 200);
-        const groundMat = new THREE.MeshStandardMaterial({ 
-            color: 0x111111, 
-            roughness: 0.8,
-            metalness: 0.2
-        });
-        const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-        groundMesh.rotation.x = -Math.PI / 2;
-        groundMesh.receiveShadow = true;
-        scene.add(groundMesh);
+<!-- VR status -->
+<div id="vr-status">🥽 VR SESSION ACTIVE — QUEST CONTROLLERS DETECTED</div>
 
-        // Player Physics Body (Capsule/Sphere for movement)
-        const playerRadius = 0.4;
-        const playerBody = new CANNON.Body({
-            mass: 50,
-            shape: new CANNON.Sphere(playerRadius),
-            position: new CANNON.Vec3(0, 5, 0),
-            material: physicsMaterial,
-            linearDamping: 0.9,
-            fixedRotation: true
-        });
-        world.addBody(playerBody);
+<script>
+// Multi-CDN Three.js loader — tries each source in order
+(function(){
+  const SRCS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+    'https://unpkg.com/three@0.128.0/build/three.min.js',
+    'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
+  ];
+  let idx = 0;
+  function tryNext() {
+    if (idx >= SRCS.length) {
+      document.getElementById('lstatus').textContent = '❌ FAILED TO LOAD THREE.JS — CHECK CONNECTION';
+      document.getElementById('lstatus').style.color = '#ff2d78';
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = SRCS[idx++];
+    s.onload = () => { window._threeLoaded = true; };
+    s.onerror = () => { document.head.removeChild(s); tryNext(); };
+    document.head.appendChild(s);
+  }
+  tryNext();
+})();
+</script>
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+// VOIDFRAME VR — Full WebXR Quest 2 / Quest 3 Build
+// ═══════════════════════════════════════════════════════════════
 
-        // Static Level Geometry (Parkour elements)
-        function createStaticPlatform(x, y, z, w, h, d, color) {
-            const body = new CANNON.Body({
-                type: CANNON.Body.STATIC,
-                shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)),
-                position: new CANNON.Vec3(x, y, z),
-                material: physicsMaterial
-            });
-            world.addBody(body);
-            const mesh = new THREE.Mesh(
-                new THREE.BoxGeometry(w, h, d),
-                new THREE.MeshStandardMaterial({ color: color, roughness: 0.5 })
-            );
-            mesh.position.copy(body.position);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            scene.add(mesh);
+// These are declared here so other functions can reference them,
+// but assigned inside initEngine() once THREE is loaded.
+let renderer, scene, camera, xrRig;
+let ambient, sun;
+let hudMesh, hudCanvas, hudCtx, hudTexture;
+let vrNotifMesh, vrNotifCanvas, vrNotifCtx, vrNotifTex;
+let vrDlgMesh, vrDlgCanvas, vrDlgCtx, vrDlgTex;
+let ctrlGroup, ctrlVisuals, lasers, ctrl;
+let arcLine, arcGeo, arcPoints, tpMarker;
+let raycaster;
+const mats = {};
+let lastT = 0;
+
+function initEngine() {
+// ── Renderer ────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true,
+  alpha: false,
+  powerPreference: 'high-performance',
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.xr.enabled = true;
+
+renderer.xr.setReferenceSpaceType('local-floor');
+
+window.addEventListener('resize', () => {
+  if (!renderer.xr.isPresenting) {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+});
+
+// ── Scene ────────────────────────────────────────────────────
+scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020407);
+scene.fog = new THREE.FogExp2(0x020407, 0.022);
+
+// ── Camera ───────────────────────────────────────────────────
+camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 300);
+camera.position.set(0, 1.6, 5);
+
+// XR rig
+xrRig = new THREE.Group();
+xrRig.position.set(0, 0, 0);
+scene.add(xrRig);
+
+// ── Lighting ─────────────────────────────────────────────────
+ambient = new THREE.AmbientLight(0x050a16, 0.9);
+scene.add(ambient);
+
+sun = new THREE.DirectionalLight(0x88b8ff, 0.7);
+sun.position.set(8, 18, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 0.1;
+sun.shadow.camera.far = 120;
+sun.shadow.camera.left = -40;
+sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40;
+sun.shadow.camera.bottom = -40;
+scene.add(sun);
+
+function addPointLight(color, intensity, dist, x, y, z) {
+  const l = new THREE.PointLight(color, intensity, dist);
+  l.position.set(x, y, z);
+  scene.add(l);
+  return l;
+}
+addPointLight(0x00ffe7, 2.5, 22, 0, 4, 0);
+addPointLight(0xff2d78, 1.8, 18, 22, 5, -12);
+addPointLight(0x7c3aff, 1.8, 18, -16, 6, 16);
+
+// ═══════════════════════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════════════════════
+const G = {
+  mode: null, paused: false, inVR: false,
+  hp: 100, maxHp: 100, energy: 100, maxEnergy: 100,
+  score: 0, kills: 0, deaths: 0,
+  currentWeaponIdx: 0,
+  objects: [], npcs: [], projectiles: [], particles: [],
+  physBodies: [],
+  grabL: null, grabR: null,  // left/right hand grabs in VR
+  grabDesktop: null,
+  startTime: 0, elapsed: 0,
+  storyProgress: 0,
+  gravity: true,
+  snap: true,
+  selectedTool: 'place',
+  selectedSpawn: 'box',
+  triggers: [],
+  dialogQueue: [], dialogActive: false,
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PHYSICS (custom AABB + velocity)
+// ═══════════════════════════════════════════════════════════════
+const GRAV = -18;
+
+function mkBody(mesh, opts = {}) {
+  const b = {
+    mesh,
+    vel: new THREE.Vector3(opts.vx||0, opts.vy||0, opts.vz||0),
+    mass: opts.mass !== undefined ? opts.mass : 1,
+    restitution: opts.restitution || 0.35,
+    friction: opts.friction !== undefined ? opts.friction : 0.82,
+    isStatic: !!opts.static,
+    size: opts.size || new THREE.Vector3(1,1,1),
+    type: opts.type || 'prop',
+    hp: opts.hp || 50,
+    maxHp: opts.hp || 50,
+    grounded: false,
+    id: Math.random().toString(36).slice(2,9),
+  };
+  G.physBodies.push(b);
+  return b;
+}
+
+function stepPhysics(dt) {
+  if (!G.gravity) return;
+  const bodies = G.physBodies;
+  for (let i = bodies.length - 1; i >= 0; i--) {
+    const b = bodies[i];
+    if (b.isStatic) continue;
+
+    b.vel.y += GRAV * dt;
+    b.mesh.position.addScaledVector(b.vel, dt);
+
+    const hy = b.size.y * 0.5;
+    const ground = groundAt(b.mesh.position.x, b.mesh.position.z, b);
+    if (b.mesh.position.y - hy < ground) {
+      b.mesh.position.y = ground + hy;
+      if (Math.abs(b.vel.y) < 0.6) b.vel.y = 0; else b.vel.y *= -b.restitution;
+      b.vel.x *= b.friction; b.vel.z *= b.friction;
+      b.grounded = true;
+    } else { b.grounded = false; }
+
+    const BD = 65;
+    if (Math.abs(b.mesh.position.x) > BD) { b.vel.x *= -0.6; b.mesh.position.x = Math.sign(b.mesh.position.x)*BD; }
+    if (Math.abs(b.mesh.position.z) > BD) { b.vel.z *= -0.6; b.mesh.position.z = Math.sign(b.mesh.position.z)*BD; }
+
+    if (b.mesh.position.y < -30) {
+      scene.remove(b.mesh);
+      bodies.splice(i, 1);
+      const oi = G.objects.findIndex(o => o.body === b);
+      if (oi !== -1) G.objects.splice(oi, 1);
+    }
+  }
+}
+
+function groundAt(x, z, skipBody) {
+  let h = 0;
+  for (const b of G.physBodies) {
+    if (!b.isStatic || b === skipBody) continue;
+    const hw = b.size.x*0.5, hd = b.size.z*0.5;
+    const bx = b.mesh.position.x, bz = b.mesh.position.z;
+    if (x > bx-hw && x < bx+hw && z > bz-hd && z < bz+hd) {
+      const top = b.mesh.position.y + b.size.y*0.5;
+      if (top > h) h = top;
+    }
+  }
+  return h;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PLAYER (desktop + XR shared state)
+// ═══════════════════════════════════════════════════════════════
+const player = {
+  pos: new THREE.Vector3(0, 1.6, 5),
+  vel: new THREE.Vector3(),
+  grounded: false,
+  height: 1.6,
+  speed: 7,
+  flyMode: false,
+};
+
+// Desktop controls
+const keys = {};
+let yaw = 0, pitch = 0;
+let ptrLocked = false;
+
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Escape') togglePause();
+  if (e.code === 'Space') desktopJump();
+  if (e.code === 'KeyF') desktopInteract();
+  if (e.code === 'KeyG') gravPulse();
+  if (e.code === 'KeyR') reload();
+  for (let i=0;i<6;i++) if(e.code===`Digit${i+1}`) selectWeapon(i);
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+document.addEventListener('mousemove', e => {
+  if (!ptrLocked) return;
+  yaw -= e.movementX * 0.002;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch - e.movementY * 0.002));
+});
+canvas.addEventListener('click', () => {
+  if (G.mode && !G.inVR && !G.paused) canvas.requestPointerLock();
+});
+document.addEventListener('pointerlockchange', () => {
+  ptrLocked = document.pointerLockElement === canvas;
+});
+document.addEventListener('mousedown', e => {
+  if (!ptrLocked) return;
+  if (e.button === 0) desktopShoot();
+  if (e.button === 2) desktopGrabToggle();
+});
+document.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => { selectWeapon((G.currentWeaponIdx + (e.deltaY > 0 ? 1 : -1) + 6) % 6); });
+
+function stepDesktopPlayer(dt) {
+  if (G.inVR || G.paused || !G.mode) return;
+  const spd = player.speed * (keys['ShiftLeft'] ? 1.6 : 1) * (keys['ControlLeft'] ? 0.5 : 1);
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+
+  if (!player.flyMode) {
+    const mv = new THREE.Vector3();
+    if (keys['KeyW']||keys['ArrowUp']) mv.addScaledVector(fwd, spd);
+    if (keys['KeyS']||keys['ArrowDown']) mv.addScaledVector(fwd, -spd);
+    if (keys['KeyA']||keys['ArrowLeft']) mv.addScaledVector(right, -spd);
+    if (keys['KeyD']||keys['ArrowRight']) mv.addScaledVector(right, spd);
+    player.vel.x = mv.x; player.vel.z = mv.z;
+    player.vel.y += GRAV * dt;
+    player.pos.addScaledVector(player.vel, dt);
+    const g = groundAt(player.pos.x, player.pos.z, null);
+    if (player.pos.y - player.height < g) {
+      player.pos.y = g + player.height;
+      player.vel.y = Math.max(0, player.vel.y);
+      player.grounded = true;
+    } else { player.grounded = false; }
+  } else {
+    const mv2 = new THREE.Vector3();
+    if (keys['KeyW']) mv2.addScaledVector(fwd, spd);
+    if (keys['KeyS']) mv2.addScaledVector(fwd, -spd);
+    if (keys['KeyA']) mv2.addScaledVector(right, -spd);
+    if (keys['KeyD']) mv2.addScaledVector(right, spd);
+    if (keys['Space']) mv2.y += spd;
+    if (keys['ControlLeft']) mv2.y -= spd;
+    player.pos.addScaledVector(mv2, dt);
+  }
+  player.pos.x = Math.max(-65, Math.min(65, player.pos.x));
+  player.pos.z = Math.max(-65, Math.min(65, player.pos.z));
+
+  camera.position.copy(player.pos);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+
+  // Dragged object
+  if (G.grabDesktop) {
+    const fwdV = new THREE.Vector3(-Math.sin(yaw), Math.sin(pitch), -Math.cos(yaw)).normalize();
+    const gp = camera.position.clone().addScaledVector(fwdV, 3.2);
+    G.grabDesktop.mesh.position.lerp(gp, 0.28);
+    G.grabDesktop.vel.set(0,0,0);
+  }
+}
+
+function desktopJump() {
+  if (player.grounded && !player.flyMode) {
+    player.vel.y = 9;
+    player.grounded = false;
+  }
+}
+
+function desktopInteract() {
+  G.npcs.forEach(n => {
+    if (n.type === 'friendly' && n.mesh.position.distanceTo(player.pos) < 3) {
+      const lines = n.mesh.userData.dialog || [];
+      const idx = n.mesh.userData.dIdx || 0;
+      if (lines.length) { queueDialog('SURVIVOR', lines[idx % lines.length]); n.mesh.userData.dIdx = idx+1; }
+    }
+  });
+}
+
+function desktopGrabToggle() {
+  if (G.grabDesktop) {
+    const fwd = new THREE.Vector3(-Math.sin(yaw), Math.sin(pitch), -Math.cos(yaw)).normalize();
+    G.grabDesktop.vel.copy(fwd.multiplyScalar(20));
+    G.grabDesktop = null;
+    return;
+  }
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(0,0), camera);
+  const hits = ray.intersectObjects(G.physBodies.filter(b=>!b.isStatic).map(b=>b.mesh));
+  if (hits.length && hits[0].distance < 8) {
+    const b = G.physBodies.find(b => b.mesh === hits[0].object);
+    if (b) G.grabDesktop = b;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WEAPONS
+// ═══════════════════════════════════════════════════════════════
+raycaster = new THREE.Raycaster();
+const WEAPONS = [
+  { name:'Gravity Gun',  icon:'🧲', ammo:Infinity, fire: fireGravGun },
+  { name:'Pulse Pistol', icon:'🔫', ammo:24,       fire: firePistol },
+  { name:'Ion Shotgun',  icon:'💥', ammo:8,        fire: fireShotgun },
+  { name:'Rail Rifle',   icon:'🎯', ammo:30,       fire: fireRifle },
+  { name:'Void Grenade', icon:'💣', ammo:3,        fire: throwGrenade },
+  { name:'Plasma Blade', icon:'⚔', ammo:Infinity,  fire: meleeSwing },
+];
+
+function selectWeapon(i) {
+  G.currentWeaponIdx = Math.max(0, Math.min(i, WEAPONS.length-1));
+  document.querySelectorAll('.hslot').forEach((s,j) => s.classList.toggle('active', j === G.currentWeaponIdx));
+  const w = WEAPONS[G.currentWeaponIdx];
+  setHUD('weapv', w.name);
+  setHUD('ammov', w.ammo === Infinity ? '∞' : w.ammo);
+}
+
+function fireFromPoint(origin, direction) {
+  // Called both from desktop mouse and XR controller
+  const w = WEAPONS[G.currentWeaponIdx];
+  if (G.grabDesktop) { desktopGrabToggle(); return; } // throw on secondary
+  w.fire(origin, direction);
+}
+
+function desktopShoot() {
+  const fwd = new THREE.Vector3(-Math.sin(yaw), Math.sin(pitch), -Math.cos(yaw)).normalize();
+  fireFromPoint(camera.position.clone(), fwd);
+}
+
+function fireGravGun(origin, dir) {
+  raycaster.set(origin, dir);
+  const hits = raycaster.intersectObjects(G.physBodies.map(b=>b.mesh));
+  if (hits.length) {
+    const b = G.physBodies.find(b => b.mesh === hits[0].object);
+    if (b && !b.isStatic) {
+      b.vel.addScaledVector(dir, -28); b.vel.y += 9;
+      burst(hits[0].point, 0x00ffe7, 22);
+    }
+  }
+  muzzleFlash(origin, 0x00ffe7);
+  glitch();
+}
+
+function firePistol(origin, dir) {
+  const w = WEAPONS[1]; if (w.ammo <= 0) { notify('No ammo!','warn'); return; }
+  w.ammo--; updateAmmoHUD();
+  spawnProjectile(origin, dir, 65, 18, 0x00ffe7, 'bullet');
+  muzzleFlash(origin, 0x00ffe7);
+}
+
+function fireShotgun(origin, dir) {
+  const w = WEAPONS[2]; if (w.ammo <= 0) { notify('No ammo!','warn'); return; }
+  w.ammo--; updateAmmoHUD();
+  for (let i=0;i<8;i++) {
+    const sp = 0.09;
+    const d2 = dir.clone().add(new THREE.Vector3((Math.random()-.5)*sp,(Math.random()-.5)*sp,(Math.random()-.5)*sp)).normalize();
+    spawnProjectile(origin.clone(), d2, 42, 10, 0xff6600, 'pellet');
+  }
+  muzzleFlash(origin, 0xff6600);
+}
+
+function fireRifle(origin, dir) {
+  const w = WEAPONS[3]; if (w.ammo <= 0) { notify('No ammo!','warn'); return; }
+  w.ammo--; updateAmmoHUD();
+  spawnProjectile(origin, dir, 130, 28, 0xaaffee, 'rail');
+  muzzleFlash(origin, 0xaaffee);
+}
+
+function throwGrenade(origin, dir) {
+  const w = WEAPONS[4]; if (w.ammo <= 0) { notify('No grenades!','warn'); return; }
+  w.ammo--; updateAmmoHUD();
+  const geo = new THREE.SphereGeometry(0.14, 8, 6);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
+  const mesh = new THREE.Mesh(geo, mat); mesh.position.copy(origin);
+  scene.add(mesh);
+  const body = mkBody(mesh, { vy: 4, size: new THREE.Vector3(0.28,0.28,0.28), type:'grenade' });
+  body.vel.addScaledVector(dir.clone(), 14);
+  setTimeout(() => {
+    explode(mesh.position.clone(), 9, 42);
+    scene.remove(mesh);
+    const bi = G.physBodies.indexOf(body);
+    if (bi !== -1) G.physBodies.splice(bi, 1);
+  }, 2400);
+}
+
+function meleeSwing(origin, dir) {
+  const r = 2.8;
+  G.npcs.forEach(n => {
+    if (!n.alive) return;
+    if (n.mesh.position.distanceTo(origin) < r) {
+      hurtNPC(n, 30 + Math.random()*20);
+      const d = n.mesh.position.clone().sub(origin).normalize();
+      n.vel.addScaledVector(d, 9); n.vel.y += 3;
+      burst(n.mesh.position.clone(), 0xff2d78, 14);
+    }
+  });
+  G.physBodies.forEach(b => {
+    if (b.isStatic) return;
+    if (b.mesh.position.distanceTo(origin) < r) {
+      const d = b.mesh.position.clone().sub(origin).normalize();
+      b.vel.addScaledVector(d, 14); b.vel.y += 4;
+    }
+  });
+  muzzleFlash(origin, 0x7c3aff);
+}
+
+function spawnProjectile(origin, dir, speed, damage, color, type) {
+  const geo = type === 'rail'
+    ? new THREE.CylinderGeometry(0.025, 0.025, 0.55, 5)
+    : new THREE.SphereGeometry(0.075, 5, 4);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color}));
+  mesh.position.copy(origin); scene.add(mesh);
+  G.projectiles.push({ mesh, vel: dir.clone().multiplyScalar(speed), damage, type, life: 3.5, alive: true });
+}
+
+function stepProjectiles(dt) {
+  for (let i = G.projectiles.length-1; i >= 0; i--) {
+    const p = G.projectiles[i];
+    if (!p.alive) { scene.remove(p.mesh); G.projectiles.splice(i,1); continue; }
+    p.mesh.position.addScaledVector(p.vel, dt);
+    p.life -= dt;
+    if (p.life <= 0 || p.mesh.position.y < -2) { scene.remove(p.mesh); G.projectiles.splice(i,1); continue; }
+
+    let hit = false;
+    for (const n of G.npcs) {
+      if (!n.alive) continue;
+      if (p.mesh.position.distanceTo(n.mesh.position) < 1.1) {
+        hurtNPC(n, p.damage); burst(p.mesh.position.clone(), 0xff2d78, 10); G.score += 5; hit = true; break;
+      }
+    }
+    if (!hit) {
+      for (const b of G.physBodies) {
+        if (b.isStatic || b.type==='grenade') continue;
+        if (p.mesh.position.distanceTo(b.mesh.position) < 0.75) {
+          b.vel.addScaledVector(p.vel.clone().normalize(), p.damage*0.25);
+          burst(p.mesh.position.clone(), 0xaaaaaa, 7); hit = true; break;
         }
-        
-        // Spawn some parkour platforms
-        createStaticPlatform(0, 2, -10, 4, 1, 4, 0xff0055);
-        createStaticPlatform(5, 4, -15, 3, 1, 3, 0x00ffaa);
-        createStaticPlatform(10, 6, -10, 3, 1, 3, 0xffff00);
-        createStaticPlatform(15, 8, -5, 2, 1, 2, 0xff00ff);
+      }
+    }
+    if (hit) { scene.remove(p.mesh); G.projectiles.splice(i,1); }
+  }
+}
 
-        // Sandbox Objects Management
-        const networkObjects = {}; // id -> {mesh, body}
-        
-        function spawnPhysicalBox(id, x, y, z, color, isLocal = false) {
-            if (networkObjects[id]) return; // Already exists
+function reload() {
+  const w = WEAPONS[G.currentWeaponIdx];
+  if (w.ammo !== Infinity) { w.ammo = [0,24,8,30,3][G.currentWeaponIdx] || 20; updateAmmoHUD(); }
+  notify('🔄 Reloaded','default');
+}
 
-            const size = 0.6;
-            const body = new CANNON.Body({
-                mass: 2,
-                shape: new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2)),
-                position: new CANNON.Vec3(x, y, z),
-                material: physicsMaterial
-            });
-            
-            // Only host simulates full physics, clients sync transforms to avoid desync
-            // But for this P2P demo, everyone simulates to keep it responsive, host acts as authority
-            world.addBody(body);
+function updateAmmoHUD() {
+  const w = WEAPONS[G.currentWeaponIdx];
+  setHUD('ammov', w.ammo === Infinity ? '∞' : w.ammo);
+}
 
-            const mesh = new THREE.Mesh(
-                new THREE.BoxGeometry(size, size, size),
-                new THREE.MeshStandardMaterial({ 
-                    color: color,
-                    emissive: color,
-                    emissiveIntensity: 0.2,
-                    roughness: 0.4
-                })
-            );
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            scene.add(mesh);
+// ═══════════════════════════════════════════════════════════════
+// PARTICLES
+// ═══════════════════════════════════════════════════════════════
+function burst(pos, color, count=14) {
+  for (let i=0;i<count;i++) {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.035+Math.random()*0.065, 4, 3),
+      new THREE.MeshBasicMaterial({color, transparent:true})
+    );
+    mesh.position.copy(pos); scene.add(mesh);
+    G.particles.push({ mesh, vel: new THREE.Vector3((Math.random()-.5)*9, Math.random()*6+2, (Math.random()-.5)*9), life: 0.3+Math.random()*0.4 });
+  }
+}
 
-            networkObjects[id] = { body, mesh, owner: isLocal ? myPeerId : null };
-            
-            if (isLocal) {
-                broadcast({ type: 'SPAWN', id, pos: [x,y,z], color });
-            }
+function muzzleFlash(pos, color) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.1,5,4), new THREE.MeshBasicMaterial({color,transparent:true}));
+  mesh.position.copy(pos); scene.add(mesh);
+  G.particles.push({ mesh, vel: new THREE.Vector3(), life: 0.07 });
+}
+
+function stepParticles(dt) {
+  for (let i=G.particles.length-1;i>=0;i--) {
+    const p = G.particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { scene.remove(p.mesh); G.particles.splice(i,1); continue; }
+    p.mesh.position.addScaledVector(p.vel, dt);
+    p.vel.y -= 14*dt;
+    p.mesh.material.opacity = Math.min(1, p.life*3);
+  }
+}
+
+function explode(pos, radius, damage) {
+  burst(pos, 0xff6600, 60); burst(pos, 0xffcc00, 30);
+  G.npcs.forEach(n => {
+    const d = n.mesh.position.distanceTo(pos);
+    if (d < radius) hurtNPC(n, damage*(1-d/radius));
+  });
+  G.physBodies.forEach(b => {
+    if (b.isStatic) return;
+    const d = b.mesh.position.distanceTo(pos);
+    if (d < radius) {
+      const dir = b.mesh.position.clone().sub(pos).normalize();
+      b.vel.addScaledVector(dir, (1-d/radius)*22); b.vel.y += 5;
+    }
+  });
+  glitch(); notify('💥 EXPLOSION!','warn');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NPCs
+// ═══════════════════════════════════════════════════════════════
+function spawnEnemy(x,y,z) {
+  const mesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.34,1.1,4,8),
+    new THREE.MeshLambertMaterial({color:0x8b0000})
+  );
+  mesh.position.set(x, y+0.9, z); mesh.castShadow = true; scene.add(mesh);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24,8,6), new THREE.MeshLambertMaterial({color:0xff4444}));
+  head.position.y = 0.95; mesh.add(head);
+  [-.1,.1].forEach(ex => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055,4,4), new THREE.MeshBasicMaterial({color:0xff0000}));
+    eye.position.set(ex, 0.04, 0.19); head.add(eye);
+  });
+  const body = mkBody(mesh, { mass:80, size:new THREE.Vector3(0.68,1.7,0.68), hp:60, type:'enemy' });
+  const npc = { mesh, body, hp:60, maxHp:60, type:'enemy', alive:true, vel:new THREE.Vector3(), state:'patrol',
+    patrolTarget: new THREE.Vector3(x+(Math.random()-.5)*12, y, z+(Math.random()-.5)*12), atkTimer:0 };
+  G.npcs.push(npc); return npc;
+}
+
+function spawnFriendly(x,y,z) {
+  const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.34,1.1,4,8), new THREE.MeshLambertMaterial({color:0x0055aa}));
+  mesh.position.set(x,y+0.9,z); scene.add(mesh);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24,8,6), new THREE.MeshLambertMaterial({color:0x0088ff}));
+  head.position.y = 0.95; mesh.add(head);
+  const body = mkBody(mesh, { mass:80, size:new THREE.Vector3(0.68,1.7,0.68), hp:999, type:'friendly' });
+  mesh.userData.dialog = ['Stay alert. The Warden is nearby.','I found power cell fragments in section B.','Watch your energy levels.'];
+  mesh.userData.dIdx = 0;
+  const npc = { mesh, body, hp:999, maxHp:999, type:'friendly', alive:true, vel:new THREE.Vector3(), state:'idle' };
+  G.npcs.push(npc); return npc;
+}
+
+function spawnBoss(x,y,z) {
+  const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.75,2,4,8), new THREE.MeshLambertMaterial({color:0x330066}));
+  mesh.position.set(x,y+1.5,z); mesh.castShadow = true; scene.add(mesh);
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.48,1), new THREE.MeshBasicMaterial({color:0x9900ff, wireframe:true}));
+  head.position.y = 1.6; mesh.add(head);
+  new THREE.Mesh(new THREE.SphereGeometry(0.38,8,6), new THREE.MeshLambertMaterial({color:0x220044}));
+  mesh.add(new THREE.PointLight(0x9900ff, 3, 10));
+  const body = mkBody(mesh, { mass:300, size:new THREE.Vector3(1.5,3.2,1.5), hp:500, type:'boss' });
+  const npc = { mesh, body, hp:500, maxHp:500, type:'boss', alive:true, vel:new THREE.Vector3(), state:'patrol',
+    patrolTarget: new THREE.Vector3(x+5,y,z+5), atkTimer:0, phase:1 };
+  G.npcs.push(npc);
+  showBossBar(npc);
+  return npc;
+}
+
+function stepNPCs(dt) {
+  G.npcs.forEach(n => {
+    if (!n.alive) return;
+    const npcPos = n.mesh.position;
+    const ppos = G.inVR ? xrRig.position : player.pos;
+    const dist = npcPos.distanceTo(ppos);
+
+    if (n.type === 'enemy' || n.type === 'boss') {
+      if (dist < 28) {
+        const dir = ppos.clone().sub(npcPos).normalize();
+        const spd = n.type==='boss' ? 2.8 : 4.2;
+        n.vel.x = dir.x*spd; n.vel.z = dir.z*spd;
+        n.mesh.lookAt(new THREE.Vector3(ppos.x, npcPos.y, ppos.z));
+        n.atkTimer -= dt;
+        if (n.atkTimer <= 0 && dist < (n.type==='boss' ? 22 : 2.4)) {
+          const dmg = n.type==='boss' ? 14+Math.random()*10 : 7+Math.random()*5;
+          G.hp = Math.max(0, G.hp-dmg);
+          n.atkTimer = n.type==='boss' ? 1.4 : 0.75;
+          if (n.type==='boss' && dist > 3) enemyFire(n);
+          glitch();
+          if (G.hp <= 0) playerDie();
         }
-
-        // ==========================================
-        // 3. VR CONTROLLERS & DESKTOP CONTROLS
-        // ==========================================
-        let isDesktop = false;
-        const desktopControls = new PointerLockControls(camera, document.body);
-        
-        document.getElementById('desktop-play-btn').addEventListener('click', () => {
-            isDesktop = true;
-            desktopControls.lock();
-            document.getElementById('ui-layer').style.display = 'none';
-            document.getElementById('crosshair').style.display = 'block';
-        });
-
-        desktopControls.addEventListener('unlock', () => {
-            document.getElementById('ui-layer').style.display = 'block';
-            document.getElementById('crosshair').style.display = 'none';
-        });
-
-        // Desktop Input state
-        const keys = { w: false, a: false, s: false, d: false, space: false };
-        document.addEventListener('keydown', (e) => {
-            if(e.code === 'KeyW') keys.w = true;
-            if(e.code === 'KeyA') keys.a = true;
-            if(e.code === 'KeyS') keys.s = true;
-            if(e.code === 'KeyD') keys.d = true;
-            if(e.code === 'Space') {
-                if(playerBody.position.y < playerRadius + 0.5) {
-                    playerBody.velocity.y = 8; // Jump
-                }
-            }
-        });
-        document.addEventListener('keyup', (e) => {
-            if(e.code === 'KeyW') keys.w = false;
-            if(e.code === 'KeyA') keys.a = false;
-            if(e.code === 'KeyS') keys.s = false;
-            if(e.code === 'KeyD') keys.d = false;
-        });
-
-        // VR Controllers
-        const controller1 = renderer.xr.getController(0); // Right Hand
-        const controller2 = renderer.xr.getController(1); // Left Hand
-        userGroup.add(controller1);
-        userGroup.add(controller2);
-
-        // Controller Models
-        const handGeo = new THREE.BoxGeometry(0.08, 0.08, 0.15);
-        const handMat1 = new THREE.MeshStandardMaterial({ color: 0x00ffff, wireframe: true });
-        const handMat2 = new THREE.MeshStandardMaterial({ color: 0xff00ff, wireframe: true });
-        const rightHandMesh = new THREE.Mesh(handGeo, handMat1);
-        const leftHandMesh = new THREE.Mesh(handGeo, handMat2);
-        controller1.add(rightHandMesh);
-        controller2.add(leftHandMesh);
-
-        // VR Locomotion State
-        let vrVelocity = new THREE.Vector3();
-        let vrDirection = new THREE.Vector3();
-
-        // Grabbing System
-        let grabbedObject = null;
-        let grabConstraint = null;
-        let grabHand = null;
-        let previousHandPos = new THREE.Vector3();
-        let handVelocity = new THREE.Vector3();
-
-        function handleGrabStart(controller) {
-            // Find nearest object
-            let nearestDist = 0.5; // Grab range
-            let nearestObj = null;
-            let nearestId = null;
-            
-            const ctrlWorldPos = new THREE.Vector3();
-            controller.getWorldPosition(ctrlWorldPos);
-
-            for (let id in networkObjects) {
-                const obj = networkObjects[id];
-                const dist = obj.mesh.position.distanceTo(ctrlWorldPos);
-                if (dist < nearestDist) {
-                    nearestDist = dist;
-                    nearestObj = obj;
-                    nearestId = id;
-                }
-            }
-
-            if (nearestObj) {
-                grabbedObject = nearestObj;
-                grabHand = controller;
-                
-                // Set Ownership
-                grabbedObject.owner = myPeerId;
-                broadcast({ type: 'OWN', objId: nearestId, owner: myPeerId });
-
-                // Attach visually and disable physics temporarily
-                world.removeBody(grabbedObject.body);
-            }
+        if (n.type==='boss' && n.hp < n.maxHp*0.4 && n.phase===1) {
+          n.phase=2; n.mesh.material.color.setHex(0x660000);
+          notify('💀 WARDEN: PHASE 2','warn'); burst(npcPos.clone(),0x9900ff,55);
         }
+      } else {
+        const dir = n.patrolTarget ? n.patrolTarget.clone().sub(npcPos).normalize() : new THREE.Vector3();
+        n.vel.x = dir.x*2; n.vel.z = dir.z*2;
+        if (n.patrolTarget && npcPos.distanceTo(n.patrolTarget) < 2)
+          n.patrolTarget = new THREE.Vector3((Math.random()-.5)*40, npcPos.y, (Math.random()-.5)*40);
+      }
+    }
 
-        function handleGrabEnd() {
-            if (grabbedObject) {
-                // Re-enable physics
-                world.addBody(grabbedObject.body);
-                grabbedObject.body.position.copy(grabbedObject.mesh.position);
-                grabbedObject.body.quaternion.copy(grabbedObject.mesh.quaternion);
-                
-                // Apply throwing velocity
-                grabbedObject.body.velocity.set(handVelocity.x * 30, handVelocity.y * 30, handVelocity.z * 30);
-                
-                grabbedObject = null;
-                grabHand = null;
-            }
+    n.vel.y += GRAV*dt;
+    n.mesh.position.addScaledVector(n.vel, dt);
+    if (n.mesh.position.y - 0.9 < 0) { n.mesh.position.y = 0.9; n.vel.y = 0; }
+    n.vel.x *= 0.82; n.vel.z *= 0.82;
+
+    if (n.type==='boss') updateBossBar(n);
+  });
+}
+
+function enemyFire(npc) {
+  const ppos = G.inVR ? xrRig.position : player.pos;
+  const dir = ppos.clone().sub(npc.mesh.position).normalize();
+  const origin = npc.mesh.position.clone().addScaledVector(dir, 1.5); origin.y += 0.5;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.13,6,4), new THREE.MeshBasicMaterial({color:0x9900ff}));
+  mesh.position.copy(origin); scene.add(mesh);
+  G.projectiles.push({ mesh, vel: dir.multiplyScalar(11), damage:18, type:'enemy', life:4, alive:true, isEnemy:true });
+}
+
+function hurtNPC(npc, dmg) {
+  npc.hp -= dmg;
+  if (npc.mesh.material?.color) {
+    const c = npc.mesh.material.color.getHex();
+    npc.mesh.material.color.setHex(0xffffff);
+    setTimeout(() => { if(npc.mesh.material) npc.mesh.material.color.setHex(c); }, 80);
+  }
+  if (npc.hp <= 0) killNPC(npc);
+}
+
+function killNPC(npc) {
+  npc.alive = false;
+  burst(npc.mesh.position.clone(), 0xff2d78, 30);
+  scene.remove(npc.mesh);
+  const bi = G.physBodies.indexOf(npc.body); if(bi!==-1) G.physBodies.splice(bi,1);
+  G.kills++; G.score += npc.type==='boss' ? 1000 : 100;
+  document.getElementById('killsv').textContent = G.kills;
+  if (npc.type==='boss') {
+    hideBossBar(); notify('🏆 BOSS DEFEATED!','gold'); advanceStory();
+  } else { notify('💀 +100','default'); }
+  G.npcs.splice(G.npcs.indexOf(npc),1);
+}
+
+function playerDie() {
+  G.deaths++; G.hp = G.maxHp;
+  const pos = G.inVR ? xrRig.position : player.pos;
+  pos.set(0, G.inVR ? 0 : 1.6, 5);
+  if (!G.inVR) { player.vel.set(0,0,0); }
+  notify('💔 TERMINATED — RESPAWNING','warn'); glitch();
+}
+
+function gravPulse() {
+  if (G.energy < 28) { notify('Energy low!','warn'); return; }
+  G.energy -= 28;
+  const origin = G.inVR ? xrRig.position.clone() : player.pos.clone();
+  G.physBodies.forEach(b => {
+    if (b.isStatic) return;
+    const d = b.mesh.position.distanceTo(origin);
+    if (d < 13) b.vel.addScaledVector(b.mesh.position.clone().sub(origin).normalize(), (13-d)*3);
+  });
+  G.npcs.forEach(n => {
+    const d = n.mesh.position.distanceTo(origin);
+    if (d < 13) { hurtNPC(n,18); n.vel.addScaledVector(n.mesh.position.clone().sub(origin).normalize(), 16); }
+  });
+  burst(origin, 0x00ffe7, 45); glitch(); notify('⚡ GRAVITY PULSE','default');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VR HUD (world-space panel attached to camera / controllers)
+// ═══════════════════════════════════════════════════════════════
+
+// We build a canvas-texture HUD panel in world space for VR
+hudCanvas = document.createElement('canvas');
+hudCanvas.width = 512; hudCanvas.height = 256;
+hudCtx = hudCanvas.getContext('2d');
+hudTexture = new THREE.CanvasTexture(hudCanvas);
+hudMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.45, 0.225),
+  new THREE.MeshBasicMaterial({ map: hudTexture, transparent: true, depthTest: false })
+);
+hudMesh.visible = false;
+
+function buildVRHUD() {
+  const c = hudCtx, w = 512, h = 256;
+  c.clearRect(0,0,w,h);
+  c.fillStyle = 'rgba(4,6,10,0.88)';
+  roundRect(c, 0, 0, w, h, 14); c.fill();
+  c.strokeStyle = '#00ffe7'; c.lineWidth = 2;
+  roundRect(c, 1,1,w-2,h-2,13); c.stroke();
+
+  // Scanline
+  c.fillStyle = 'rgba(0,255,231,0.03)';
+  for (let y=0; y<h; y+=3) { c.fillRect(0,y,w,1); }
+
+  // Title
+  c.font = 'bold 13px "Orbitron", monospace';
+  c.fillStyle = '#00ffe7'; c.letterSpacing = '4px';
+  c.fillText('VOIDFRAME', 16, 26);
+  c.font = '10px "Share Tech Mono", monospace';
+  c.fillStyle = 'rgba(0,255,231,0.5)';
+  c.fillText('WRIST HUD', 16, 40);
+
+  // HP bar
+  bar(c, 'HEALTH', G.hp, G.maxHp, '#ff2d78', '#ff6b35', 16, 56, 220, 18);
+  bar(c, 'ENERGY', G.energy, G.maxEnergy, '#7c3aff', '#00ffe7', 16, 96, 220, 18);
+
+  // Stats
+  c.font = '11px "Rajdhani", sans-serif';
+  c.fillStyle = '#fff';
+  const stats = [
+    ['SCORE', G.score],
+    ['KILLS', G.kills],
+    ['WEAPON', WEAPONS[G.currentWeaponIdx].name],
+    ['AMMO', WEAPONS[G.currentWeaponIdx].ammo===Infinity?'∞':WEAPONS[G.currentWeaponIdx].ammo],
+  ];
+  stats.forEach(([label,val],i) => {
+    const col = i < 2 ? 260 : 380;
+    const row = i < 2 ? 56 + i*28 : 56 + (i-2)*28;
+    c.fillStyle = 'rgba(0,255,231,0.5)';
+    c.font = '9px "Share Tech Mono"';
+    c.fillText(label, col, row+2);
+    c.fillStyle = '#fff';
+    c.font = '14px "Rajdhani", sans-serif';
+    c.fillText(String(val), col, row+18);
+  });
+
+  // Mode
+  c.font = '9px "Share Tech Mono"';
+  c.fillStyle = 'rgba(255,255,255,0.3)';
+  c.fillText((G.mode||'—').toUpperCase() + ' MODE', 16, 145);
+
+  // Timer
+  const el = G.elapsed, m = Math.floor(el/60), s = Math.floor(el%60);
+  c.font = '18px "Orbitron"';
+  c.fillStyle = '#fff';
+  c.fillText(`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`, 16, 168);
+
+  // Corner deco
+  c.strokeStyle = 'rgba(0,255,231,0.2)'; c.lineWidth = 1;
+  c.strokeRect(16, h-26, 16, 16);
+  c.strokeRect(w-32, h-26, 16, 16);
+
+  hudTexture.needsUpdate = true;
+}
+
+function bar(c, label, val, max, colorA, colorB, x, y, w, h) {
+  c.font = '9px "Share Tech Mono"';
+  c.fillStyle = 'rgba(0,255,231,0.55)';
+  c.fillText(label, x, y);
+  const bx=x, by=y+3, bw=w, bh=h-6;
+  c.fillStyle = 'rgba(255,255,255,0.08)';
+  c.fillRect(bx, by, bw, bh);
+  const grad = c.createLinearGradient(bx,by,bx+bw,by);
+  grad.addColorStop(0, colorA); grad.addColorStop(1, colorB);
+  c.fillStyle = grad;
+  c.fillRect(bx, by, bw*(val/max), bh);
+  c.font = '10px "Rajdhani"';
+  c.fillStyle = '#fff';
+  c.fillText(`${Math.floor(val)}/${Math.floor(max)}`, bx+bw+8, by+bh-2);
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x+r, y);
+  c.lineTo(x+w-r, y); c.arcTo(x+w,y,x+w,y+r,r);
+  c.lineTo(x+w,y+h-r); c.arcTo(x+w,y+h,x+w-r,y+h,r);
+  c.lineTo(x+r,y+h); c.arcTo(x,y+h,x,y+h-r,r);
+  c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
+  c.closePath();
+}
+
+// VR notification panel
+vrNotifCanvas = document.createElement('canvas');
+vrNotifCanvas.width = 400; vrNotifCanvas.height = 100;
+vrNotifCtx = vrNotifCanvas.getContext('2d');
+vrNotifTex = new THREE.CanvasTexture(vrNotifCanvas);
+vrNotifMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.32, 0.08),
+  new THREE.MeshBasicMaterial({ map: vrNotifTex, transparent: true, depthTest: false })
+);
+vrNotifMesh.visible = false;
+let vrNotifTimer = 0;
+
+function showVRNotif(msg, color='#00ffe7') {
+  const c = vrNotifCtx, w=400, h=100;
+  c.clearRect(0,0,w,h);
+  c.fillStyle = 'rgba(4,6,10,0.85)';
+  c.fillRect(0,0,w,h);
+  c.strokeStyle = color; c.lineWidth = 2;
+  c.strokeRect(1,1,w-2,h-2);
+  c.fillStyle = color;
+  c.font = 'bold 18px monospace';
+  c.fillText(msg.substring(0,36), 12, 38);
+  vrNotifTex.needsUpdate = true;
+  vrNotifMesh.visible = true;
+  vrNotifTimer = 2.5;
+}
+
+// VR dialog panel
+vrDlgCanvas = document.createElement('canvas');
+vrDlgCanvas.width = 600; vrDlgCanvas.height = 180;
+vrDlgCtx = vrDlgCanvas.getContext('2d');
+vrDlgTex = new THREE.CanvasTexture(vrDlgCanvas);
+vrDlgMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.6, 0.18),
+  new THREE.MeshBasicMaterial({ map: vrDlgTex, transparent: true, depthTest: false })
+);
+vrDlgMesh.visible = false;
+
+function showVRDialog(name, text) {
+  const c = vrDlgCtx, w=600, h=180;
+  c.clearRect(0,0,w,h);
+  c.fillStyle = 'rgba(4,6,10,0.92)';
+  c.fillRect(0,0,w,h);
+  c.strokeStyle = '#00ffe7'; c.lineWidth = 2;
+  c.strokeRect(1,1,w-2,h-2);
+  c.font = '11px "Share Tech Mono"';
+  c.fillStyle = '#00ffe7';
+  c.fillText(name, 14, 24);
+  c.fillStyle = '#fff';
+  c.font = '15px "Rajdhani"';
+  wrapText(c, text, 14, 50, w-28, 20);
+  c.fillStyle = 'rgba(255,255,255,0.3)';
+  c.font = '10px "Share Tech Mono"';
+  c.fillText('[TRIGGER → CONTINUE]', 14, h-10);
+  vrDlgTex.needsUpdate = true;
+  vrDlgMesh.visible = true;
+}
+
+function hideVRDialog() { vrDlgMesh.visible = false; }
+
+function wrapText(ctx, text, x, y, maxW, lineH) {
+  const words = text.split(' '); let line = '';
+  words.forEach((word,i) => {
+    const test = line + word + ' ';
+    if (ctx.measureText(test).width > maxW && i > 0) {
+      ctx.fillText(line, x, y); line = word + ' '; y += lineH;
+    } else { line = test; }
+  });
+  ctx.fillText(line, x, y);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WEBXR CONTROLLER SYSTEM (Quest 2 / Quest 3)
+// ═══════════════════════════════════════════════════════════════
+
+// Controller meshes
+ctrlGroup = [new THREE.Group(), new THREE.Group()];
+ctrlGroup.forEach(g => { scene.add(g); g.visible = false; });
+
+// Build controller visual (simple gun/hand model)
+function buildControllerMesh(side) {
+  const g = new THREE.Group();
+
+  // Grip body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.035, 0.1, 0.18),
+    new THREE.MeshLambertMaterial({ color: side === 0 ? 0x222288 : 0x882222 })
+  );
+  body.position.set(0, 0, -0.03);
+  g.add(body);
+
+  // Neon edge glow
+  const edgesGeo = new THREE.EdgesGeometry(body.geometry);
+  const edgesMat = new THREE.LineBasicMaterial({ color: side===0 ? 0x00ffe7 : 0xff2d78, transparent:true, opacity:0.7 });
+  body.add(new THREE.LineSegments(edgesGeo, edgesMat));
+
+  // Barrel
+  const barrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.008, 0.008, 0.14, 8),
+    new THREE.MeshLambertMaterial({ color: 0x111111 })
+  );
+  barrel.rotation.x = Math.PI/2;
+  barrel.position.set(0, 0.01, -0.13);
+  g.add(barrel);
+
+  // Muzzle glow point
+  const ml = new THREE.PointLight(side===0 ? 0x00ffe7 : 0xff2d78, 0, 0.6);
+  ml.position.set(0, 0.01, -0.22);
+  g.add(ml);
+  g.userData.muzzleLight = ml;
+  g.userData.barrel = barrel;
+
+  // Trigger indicator dot
+  const dot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.005, 5, 4),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent:true, opacity:0 })
+  );
+  dot.position.set(0, -0.025, -0.04);
+  g.add(dot);
+  g.userData.triggerDot = dot;
+
+  return g;
+}
+
+ctrlVisuals = [buildControllerMesh(0), buildControllerMesh(1)];
+ctrlGroup.forEach((g,i) => g.add(ctrlVisuals[i]));
+
+// Add wrist HUD to left controller group
+hudMesh.position.set(0, 0.04, 0.05);
+hudMesh.rotation.x = -Math.PI * 0.35;
+ctrlGroup[0].add(hudMesh);
+
+// Add VR notif + dialog floating in front of player (attached to xrRig)
+vrNotifMesh.position.set(0, 1.55, -1.2);
+xrRig.add(vrNotifMesh);
+vrDlgMesh.position.set(0, 1.2, -1.15);
+xrRig.add(vrDlgMesh);
+
+// Laser pointer (raycast indicator)
+function buildLaserPointer(color) {
+  const pts = [new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-4)];
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.55 });
+  return new THREE.Line(geo, mat);
+}
+lasers = [buildLaserPointer(0x00ffe7), buildLaserPointer(0xff2d78)];
+ctrlVisuals.forEach((v,i) => v.add(lasers[i]));
+
+// Controller state
+ctrl = [
+  { grip: null, ray: null, gamepad: null, trigger: 0, squeeze: 0, axes: [0,0,0,0], prev: { trigger:0, squeeze:0, btnA:false, btnB:false, btnX:false, btnY:false, menu:false, thumbClick:false } },
+  { grip: null, ray: null, gamepad: null, trigger: 0, squeeze: 0, axes: [0,0,0,0], prev: { trigger:0, squeeze:0, btnA:false, btnB:false } },
+];
+
+// Teleport arc
+let teleportTarget = null;
+arcPoints = [];
+for (let i=0; i<20; i++) arcPoints.push(new THREE.Vector3());
+arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
+arcLine = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color:0x00ffe7, transparent:true, opacity:0.7 }));
+scene.add(arcLine); arcLine.visible = false;
+
+tpMarker = new THREE.Mesh(
+  new THREE.RingGeometry(0.18, 0.22, 24),
+  new THREE.MeshBasicMaterial({ color:0x00ffe7, side:THREE.DoubleSide, transparent:true, opacity:0.8 })
+);
+tpMarker.rotation.x = -Math.PI/2; tpMarker.position.y = 0.01;
+scene.add(tpMarker); tpMarker.visible = false;
+
+function computeTeleportArc(origin, dir) {
+  const g = 14, v0 = 8;
+  let t = 0, hit = false;
+  for (let i=0; i<20; i++) {
+    t = i * 0.1;
+    const p = origin.clone().addScaledVector(dir, v0*t);
+    p.y += -0.5*g*t*t;
+    arcPoints[i].copy(p);
+    if (p.y <= 0.01 && i > 0) {
+      p.y = 0.01;
+      arcPoints[i].copy(p);
+      teleportTarget = p.clone();
+      hit = true;
+      // Fill remaining points at hit
+      for (let j=i+1; j<20; j++) arcPoints[j].copy(p);
+      break;
+    }
+  }
+  if (!hit) teleportTarget = null;
+  arcGeo.setFromPoints(arcPoints);
+  arcGeo.attributes.position.needsUpdate = true;
+  if (teleportTarget) tpMarker.position.set(teleportTarget.x, 0.01, teleportTarget.z);
+}
+
+// Snap rotation
+let snapTimer = 0;
+
+function setupXRControllers() {
+  // Quest controller 0 = left, 1 = right
+  for (let i = 0; i < 2; i++) {
+    const controller = renderer.xr.getController(i);
+    controller.addEventListener('connected', e => {
+      ctrl[i].grip = e.data;
+      ctrlGroup[i].visible = true;
+    });
+    controller.addEventListener('disconnected', () => {
+      ctrlGroup[i].visible = false;
+    });
+    // The controller group follows the controller pose
+    scene.add(controller);
+    controller.add(ctrlGroup[i]);
+    ctrl[i].ray = controller;
+
+    // Grip space (for accurate hand position)
+    const grip = renderer.xr.getControllerGrip(i);
+    scene.add(grip);
+    ctrl[i].gripSpace = grip;
+  }
+}
+
+function pollXRControllers() {
+  const session = renderer.xr.getSession();
+  if (!session) return;
+  const inputSources = session.inputSources;
+  if (!inputSources) return;
+
+  for (const src of inputSources) {
+    const hand = src.handedness === 'left' ? 0 : src.handedness === 'right' ? 1 : -1;
+    if (hand === -1) continue;
+    const gp = src.gamepad;
+    if (!gp) continue;
+    ctrl[hand].gamepad = gp;
+
+    const b = gp.buttons;
+    const ax = gp.axes;
+
+    ctrl[hand].trigger = b[0]?.value || 0;
+    ctrl[hand].squeeze = b[1]?.value || 0;
+    ctrl[hand].axes = [ax[0]||0, ax[1]||0, ax[2]||0, ax[3]||0];
+
+    // Button mapping (Quest 2/3 standard layout):
+    // b[0] = trigger, b[1] = squeeze/grip
+    // b[3] = thumbstick click
+    // b[4] = A (right) / X (left)
+    // b[5] = B (right) / Y (left) / menu (left)
+    const btnThumb = b[3]?.pressed || false;
+    const btn4 = b[4]?.pressed || false;
+    const btn5 = b[5]?.pressed || false;
+    const prev = ctrl[hand].prev;
+
+    // ── RIGHT CONTROLLER ─────────────────────────────────
+    if (hand === 1) {
+      // Trigger → shoot
+      if (ctrl[1].trigger > 0.7 && prev.trigger <= 0.7) {
+        const origin = ctrl[1].ray.position.clone();
+        const dir = new THREE.Vector3(0,0,-1).applyQuaternion(ctrl[1].ray.quaternion);
+        fireFromPoint(origin, dir);
+        // Muzzle light flash
+        const ml = ctrlVisuals[1].userData.muzzleLight;
+        ml.intensity = 3; setTimeout(() => { ml.intensity = 0; }, 80);
+      }
+      // Squeeze → grab / throw
+      if (ctrl[1].squeeze > 0.6 && prev.squeeze <= 0.6) vrGrab(1);
+      if (ctrl[1].squeeze < 0.3 && prev.squeeze >= 0.6) vrRelease(1);
+
+      // A = interact
+      if (btn4 && !prev.btnA) desktopInteract();
+      // B = jump (teleport confirm handled separately)
+      if (btn5 && !prev.btnB) {
+        // Snap turn right
+        snapTurn(45);
+      }
+      // Thumbstick click = weapon cycle
+      if (btnThumb && !prev.thumbClick) {
+        selectWeapon((G.currentWeaponIdx + 1) % WEAPONS.length);
+        notify('⚔ '+WEAPONS[G.currentWeaponIdx].name,'default');
+      }
+      // Right stick X → snap turn
+      const rx = ax[2]||0;
+      if (Math.abs(rx) > 0.7 && snapTimer <= 0) {
+        snapTurn(rx > 0 ? 45 : -45);
+        snapTimer = 0.35;
+      }
+      // Right stick Y → smooth locomotion forward/back (right hand = move)
+      const rz = ax[3]||0;
+      if (Math.abs(rz) > 0.18 && G.inVR) {
+        const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(ctrl[1].ray.quaternion);
+        fwd.y = 0; fwd.normalize();
+        xrRig.position.addScaledVector(fwd, -rz * 0.05);
+      }
+
+      prev.trigger = ctrl[1].trigger;
+      prev.squeeze = ctrl[1].squeeze;
+      prev.btnA = btn4; prev.btnB = btn5; prev.thumbClick = btnThumb;
+    }
+
+    // ── LEFT CONTROLLER ──────────────────────────────────
+    if (hand === 0) {
+      // Trigger → toggle teleport arc / confirm
+      if (ctrl[0].trigger > 0.7 && prev.trigger <= 0.7) {
+        // Show arc
+        arcLine.visible = true; tpMarker.visible = true;
+      }
+      if (ctrl[0].trigger < 0.3 && prev.trigger >= 0.3) {
+        // Confirm teleport
+        if (teleportTarget) {
+          xrRig.position.x = teleportTarget.x;
+          xrRig.position.z = teleportTarget.z;
+          burst(teleportTarget, 0x7c3aff, 12);
         }
+        arcLine.visible = false; tpMarker.visible = false; teleportTarget = null;
+      }
+      // Squeeze → grab left hand
+      if (ctrl[0].squeeze > 0.6 && prev.squeeze <= 0.6) vrGrab(0);
+      if (ctrl[0].squeeze < 0.3 && prev.squeeze >= 0.6) vrRelease(0);
 
-        // Controller Events (VR)
-        controller1.addEventListener('squeezestart', () => handleGrabStart(controller1)); // Right Grip
-        controller1.addEventListener('squeezeend', handleGrabEnd);
-        
-        // Spawn Object
-        controller1.addEventListener('selectstart', () => { // Right Trigger
-            const pos = new THREE.Vector3();
-            controller1.getWorldPosition(pos);
-            const dir = new THREE.Vector3(0, 0, -1);
-            dir.applyQuaternion(controller1.quaternion);
-            
-            const spawnPos = pos.clone().add(dir.multiplyScalar(1.0)); // Spawn 1m in front
-            const objId = 'obj_' + Math.random().toString(36).substr(2, 9);
-            const color = Math.random() * 0xffffff;
-            spawnPhysicalBox(objId, spawnPos.x, spawnPos.y, spawnPos.z, color, true);
-        });
+      // X button = gravity pulse
+      if (btn4 && !prev.btnX) gravPulse();
+      // Y button = reload
+      if (btn5 && !prev.btnY) reload();
 
-        // Desktop Events
-        document.addEventListener('mousedown', (e) => {
-            if(!isDesktop || !desktopControls.isLocked) return;
-            
-            if (e.button === 0) { // Left Click - Spawn
-                const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-                const pos = camera.position.clone().add(dir.multiplyScalar(2));
-                const objId = 'obj_' + Math.random().toString(36).substr(2, 9);
-                const color = Math.random() * 0xffffff;
-                spawnPhysicalBox(objId, pos.x, pos.y, pos.z, color, true);
-            }
-            if (e.button === 2) { // Right click - simple throw forward of nearest obj
-                 let nearestDist = 3.0; 
-                 let nearestObj = null;
-                 for (let id in networkObjects) {
-                     const obj = networkObjects[id];
-                     const dist = obj.mesh.position.distanceTo(camera.position);
-                     if (dist < nearestDist) { nearestDist = dist; nearestObj = obj; }
-                 }
-                 if(nearestObj) {
-                     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-                     nearestObj.body.position.copy(camera.position).add(dir.multiplyScalar(1));
-                     nearestObj.body.velocity.copy(dir.multiplyScalar(15));
-                 }
-            }
-        });
+      // Left thumbstick = strafing locomotion
+      const lx = ax[0]||0, lz = ax[1]||0;
+      if ((Math.abs(lx) > 0.18 || Math.abs(lz) > 0.18) && G.inVR) {
+        const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(ctrl[1].ray.quaternion); fwd.y=0; fwd.normalize();
+        const right = new THREE.Vector3(1,0,0).applyQuaternion(ctrl[1].ray.quaternion); right.y=0; right.normalize();
+        xrRig.position.addScaledVector(fwd, -lz * 0.06);
+        xrRig.position.addScaledVector(right, lx * 0.06);
+      }
 
-        // ==========================================
-        // 4. MULTIPLAYER (PEERJS)
-        // ==========================================
-        const peer = new Peer(null, { debug: 2 });
-        let myPeerId = null;
-        let isHost = false;
-        let hostConnection = null;
-        const connections = {}; // For host: connected clients
-        const remotePlayers = {}; // id -> Group
+      // Update teleport arc
+      if (ctrl[0].trigger > 0.7 && arcLine.visible) {
+        const origin = ctrl[0].ray.position.clone();
+        const dir = new THREE.Vector3(0,0,-1).applyQuaternion(ctrl[0].ray.quaternion);
+        computeTeleportArc(origin, dir);
+      }
 
-        const uiMyId = document.getElementById('my-id');
-        const uiStatus = document.getElementById('conn-status');
+      prev.trigger = ctrl[0].trigger;
+      prev.squeeze = ctrl[0].squeeze;
+      prev.btnX = btn4; prev.btnY = btn5;
+    }
+  }
+}
 
-        peer.on('open', (id) => {
-            myPeerId = id;
-            uiMyId.innerText = id;
-            isHost = true; // Default to host unless we join someone
-            uiStatus.innerText = "Ready (Host)";
-            uiStatus.style.color = "#0f0";
-        });
+function vrGrab(hand) {
+  const controllerPos = ctrl[hand].ray.position;
+  let nearest = null, nearestDist = 1.2;
+  G.physBodies.forEach(b => {
+    if (b.isStatic || b.type==='grenade') return;
+    const d = b.mesh.position.distanceTo(controllerPos);
+    if (d < nearestDist) { nearestDist = d; nearest = b; }
+  });
+  if (nearest) {
+    if (hand === 0) G.grabL = nearest; else G.grabR = nearest;
+    notify('✋ Grabbed!','default');
+  }
+}
 
-        // When someone joins US (We are host)
-        peer.on('connection', (conn) => {
-            setupConnection(conn);
-            conn.on('open', () => {
-                // Send current state to new player
-                const state = { type: 'FULL_STATE', objects: [] };
-                for (let id in networkObjects) {
-                    const obj = networkObjects[id];
-                    state.objects.push({
-                        id, pos: obj.body.position.toArray(), 
-                        color: obj.mesh.material.color.getHex()
-                    });
-                }
-                conn.send(state);
-            });
-        });
+function vrRelease(hand) {
+  const b = hand === 0 ? G.grabL : G.grabR;
+  if (!b) return;
+  // Throw: add controller velocity
+  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(ctrl[hand].ray.quaternion);
+  b.vel.copy(dir.multiplyScalar(22));
+  if (hand === 0) G.grabL = null; else G.grabR = null;
+}
 
-        // Join Button Logic (We become client)
-        document.getElementById('join-btn').addEventListener('click', () => {
-            const hostId = document.getElementById('friend-id').value.trim();
-            if (hostId && hostId !== myPeerId) {
-                isHost = false;
-                uiStatus.innerText = "Connecting...";
-                uiStatus.style.color = "#ff0";
-                
-                const conn = peer.connect(hostId);
-                hostConnection = conn;
-                setupConnection(conn);
-            }
-        });
+function updateVRGrabs() {
+  [G.grabL, G.grabR].forEach((b, hand) => {
+    if (!b) return;
+    const target = ctrl[hand].ray.position.clone();
+    b.mesh.position.lerp(target, 0.3);
+    b.vel.set(0,0,0);
+  });
+}
 
-        function setupConnection(conn) {
-            connections[conn.peer] = conn;
-            createRemotePlayer(conn.peer);
+function snapTurn(degrees) {
+  const rad = degrees * Math.PI / 180;
+  const pivot = G.inVR ? xrRig.position : player.pos;
+  const headPosWorld = renderer.xr.getCamera(camera).position.clone();
+  const localHead = headPosWorld.clone().sub(xrRig.position);
+  xrRig.rotation.y += rad;
+  // Adjust rig position so head stays in same world position
+  const newLocalHead = localHead.clone().applyAxisAngle(new THREE.Vector3(0,1,0), rad);
+  xrRig.position.add(localHead).sub(newLocalHead);
+}
 
-            conn.on('open', () => {
-                uiStatus.innerText = isHost ? `Hosting (${Object.keys(connections).length} connected)` : "Connected to Host";
-                uiStatus.style.color = "#0f0";
-            });
+// ═══════════════════════════════════════════════════════════════
+// WORLD BUILDING
+// ═══════════════════════════════════════════════════════════════
+mats.floor = new THREE.MeshLambertMaterial({color:0x0c1118});
+mats.metal = new THREE.MeshLambertMaterial({color:0x1e2f3e});
+mats.concrete = new THREE.MeshLambertMaterial({color:0x181828});
+mats.purple = new THREE.MeshLambertMaterial({color:0x2a1050});
+mats.neonStrip = new THREE.MeshBasicMaterial({color:0x00ffe7});
+mats.neonStrip2 = new THREE.MeshBasicMaterial({color:0xff2d78});
+mats.glitch = new THREE.MeshBasicMaterial({color:0xff00aa, wireframe:true});
 
-            conn.on('data', (data) => {
-                handleNetworkData(data, conn.peer);
-                // If Host, relay to other clients
-                if (isHost && data.type !== 'FULL_STATE') {
-                    for (let id in connections) {
-                        if (id !== conn.peer && connections[id].open) {
-                            connections[id].send(data);
-                        }
-                    }
-                }
-            });
+renderer.setAnimationLoop(loop);
+} // end initEngine()
 
-            conn.on('close', () => {
-                removeRemotePlayer(conn.peer);
-                delete connections[conn.peer];
-                if(isHost) uiStatus.innerText = `Hosting (${Object.keys(connections).length} connected)`;
-            });
-        }
+function box(w,h,d,mat,x,y,z,opts={}) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  mesh.position.set(x,y,z);
+  mesh.receiveShadow=true; mesh.castShadow=!opts.ns;
+  scene.add(mesh);
+  if(!opts.np) mkBody(mesh,{static:true,size:new THREE.Vector3(w,h,d),type:opts.type||'wall',hp:opts.hp||999});
+  return mesh;
+}
 
-        function createRemotePlayer(id) {
-            const group = new THREE.Group();
-            
-            // Stylized Head
-            const headMesh = new THREE.Mesh(
-                new THREE.BoxGeometry(0.35, 0.35, 0.35), 
-                new THREE.MeshStandardMaterial({color: 0x00ffff, emissive: 0x004444})
-            );
-            // Visor
-            const visor = new THREE.Mesh(
-                new THREE.BoxGeometry(0.4, 0.1, 0.1),
-                new THREE.MeshBasicMaterial({color: 0xffffff})
-            );
-            visor.position.set(0, 0, -0.18);
-            headMesh.add(visor);
+function neonEdge(mesh, color=0x00ffe7) {
+  const l = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({color,transparent:true,opacity:0.45}));
+  mesh.add(l);
+}
 
-            // Hands
-            const lHand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.15), new THREE.MeshStandardMaterial({color: 0xff00ff}));
-            const rHand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.15), new THREE.MeshStandardMaterial({color: 0x00ffff}));
+function buildLab() {
+  // Floor + ceiling
+  const fl = box(80,1,80,mats.floor,0,-0.5,0);
+  neonEdge(fl,0x00ffe7);
+  box(80,1,80,mats.concrete,0,20,0,{ns:true});
 
-            group.add(headMesh);
-            group.add(lHand);
-            group.add(rHand);
-            scene.add(group);
+  // Grid lines
+  for(let i=-40;i<=40;i+=5){
+    box(80,0.02,0.04,new THREE.MeshBasicMaterial({color:0x00ffe7,transparent:true,opacity:0.07}),0,0.01,i,{np:true});
+    box(0.04,0.02,80,new THREE.MeshBasicMaterial({color:0x00ffe7,transparent:true,opacity:0.07}),i,0.01,0,{np:true});
+  }
+  // Walls
+  box(80,22,1,mats.concrete,0,11,-40,{hp:600});
+  box(80,22,1,mats.concrete,0,11,40,{hp:600});
+  box(1,22,80,mats.concrete,-40,11,0,{hp:600});
+  box(1,22,80,mats.concrete,40,11,0,{hp:600});
 
-            remotePlayers[id] = { group, head: headMesh, lHand, rHand };
-        }
+  // Platforms
+  [[10,1,8,mats.metal,-16,4,-10],[8,1,8,mats.metal,18,7,8],[12,1,6,mats.metal,5,10,-20],[6,1,6,mats.metal,-20,2,15],[10,1,10,mats.purple,0,14,0]].forEach(args => {
+    neonEdge(box(...args),0x7c3aff);
+  });
 
-        function removeRemotePlayer(id) {
-            if (remotePlayers[id]) {
-                scene.remove(remotePlayers[id].group);
-                delete remotePlayers[id];
-            }
-        }
+  // Pillars
+  for(let i=0;i<8;i++){
+    const a=(i/8)*Math.PI*2, r=22;
+    neonEdge(box(2,18,2,mats.metal,Math.cos(a)*r,9,Math.sin(a)*r,{hp:200}),i%2?0xff2d78:0x00ffe7);
+  }
 
-        function broadcast(data) {
-            if (isHost) {
-                // Send to all clients
-                for (let id in connections) {
-                    if (connections[id].open) connections[id].send(data);
-                }
-            } else if (hostConnection && hostConnection.open) {
-                // Send to host (who relays)
-                hostConnection.send(data);
-            }
-        }
+  // Neon ceiling strips
+  for(let i=-35;i<=35;i+=10){
+    box(0.06,0.06,80,new THREE.MeshBasicMaterial({color:0x00ffe7,transparent:true,opacity:0.9}),i,19.4,0,{np:true});
+  }
 
-        function handleNetworkData(data, senderId) {
-            switch(data.type) {
-                case 'PLAYER_SYNC':
-                    if (remotePlayers[senderId]) {
-                        const rp = remotePlayers[senderId];
-                        rp.head.position.fromArray(data.hP);
-                        rp.head.quaternion.fromArray(data.hQ);
-                        rp.lHand.position.fromArray(data.lP);
-                        rp.lHand.quaternion.fromArray(data.lQ);
-                        rp.rHand.position.fromArray(data.rP);
-                        rp.rHand.quaternion.fromArray(data.rQ);
-                    }
-                    break;
-                case 'SPAWN':
-                    spawnPhysicalBox(data.id, data.pos[0], data.pos[1], data.pos[2], data.color, false);
-                    break;
-                case 'OBJ_SYNC':
-                    if (networkObjects[data.id] && networkObjects[data.id].owner !== myPeerId) {
-                        const obj = networkObjects[data.id];
-                        obj.body.position.fromArray(data.p);
-                        obj.body.quaternion.fromArray(data.q);
-                        obj.body.velocity.fromArray(data.v);
-                    }
-                    break;
-                case 'OWN':
-                    if (networkObjects[data.objId]) {
-                        networkObjects[data.objId].owner = data.owner;
-                    }
-                    break;
-                case 'FULL_STATE':
-                    // Initial load for clients
-                    data.objects.forEach(obj => {
-                        spawnPhysicalBox(obj.id, obj.pos[0], obj.pos[1], obj.pos[2], obj.color, false);
-                    });
-                    break;
-            }
-        }
+  // Physics props
+  for(let i=0;i<14;i++) spawnProp('barrel',(Math.random()-.5)*28,3,(Math.random()-.5)*28);
+  for(let i=0;i<10;i++) spawnProp('box',(Math.random()-.5)*24,2,(Math.random()-.5)*24);
 
-        // ==========================================
-        // 5. MAIN LOOP
-        // ==========================================
-        const clock = new THREE.Clock();
-        let networkTick = 0;
+  // Ramp
+  const rm = new THREE.Mesh(new THREE.BoxGeometry(6,0.8,12), mats.metal);
+  rm.rotation.x=-0.28; rm.position.set(-20,1.4,-6); rm.receiveShadow=true; scene.add(rm);
 
-        renderer.setAnimationLoop(() => {
-            const dt = clock.getDelta();
+  // NPCs
+  spawnEnemy(12,0,8); spawnEnemy(-10,0,-12); spawnEnemy(20,0,-15);
+  spawnFriendly(-5,0,10);
 
-            // 1. Desktop Locomotion logic
-            if (isDesktop && desktopControls.isLocked) {
-                const speed = 10;
-                vrDirection.set(Number(keys.d) - Number(keys.a), 0, Number(keys.s) - Number(keys.w));
-                vrDirection.normalize();
-                
-                // Apply rotation from camera
-                const euler = new THREE.Euler(0, camera.rotation.y, 0, 'YXZ');
-                vrDirection.applyEuler(euler);
+  // Triggers
+  mkTrigger(0,0,0,5,()=>queueDialog('VOID_AI',"VOID_LAB_01 online. Physics anomaly detected. Proceed with caution."));
+  mkTrigger(-16,5,-10,4,()=>{notify('⚡ Power terminal!','gold');G.score+=100;});
+  mkTrigger(0,14,0,5,()=>{notify('🏔 High ground! +50','gold');G.score+=50;});
+}
 
-                playerBody.velocity.x = vrDirection.x * speed;
-                playerBody.velocity.z = vrDirection.z * speed;
-                
-                // Map camera to physics body
-                camera.position.copy(playerBody.position);
-                camera.position.y += 0.8; // Eye height offset from sphere center
-            } 
-            // 2. VR Locomotion Logic
-            else if (renderer.xr.isPresenting) {
-                const session = renderer.xr.getSession();
-                if (session && session.inputSources) {
-                    for (const source of session.inputSources) {
-                        if (!source.gamepad) continue;
-                        const axes = source.gamepad.axes;
-                        
-                        // Left Controller - Movement (Axes 2, 3)
-                        if (source.handedness === 'left') {
-                            const x = axes[2];
-                            const y = axes[3];
-                            if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
-                                const speed = 6;
-                                const dir = new THREE.Vector3(x, 0, y);
-                                // Move relative to head rotation
-                                const headRot = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-                                dir.applyEuler(new THREE.Euler(0, headRot.y, 0));
-                                
-                                playerBody.velocity.x = dir.x * speed;
-                                playerBody.velocity.z = dir.z * speed;
-                            }
-                            
-                            // Jump (A/X Button - usually button 4 or 5, checking 4 for generic XR)
-                            if (source.gamepad.buttons[4]?.pressed || source.gamepad.buttons[0]?.pressed) {
-                                if(playerBody.position.y < playerRadius + 0.5 && playerBody.velocity.y < 1) {
-                                    playerBody.velocity.y = 8;
-                                }
-                            }
-                        }
-                        // Right Controller - Snap Turn (Axes 2, 3)
-                        if (source.handedness === 'right') {
-                            // Implement snap turning here if desired, simplified for MVP
-                        }
-                    }
-                }
+function buildArena() {
+  scene.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(30,30,1,32),mats.floor),{position:{y:-0.5,x:0,z:0},receiveShadow:true}));
+  scene.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(30,30,8,32,1,true),mats.metal),{position:{y:4,x:0,z:0}}));
+  mkBody({position:new THREE.Vector3(0,-0.5,0)}, {static:true,size:new THREE.Vector3(60,1,60)});
 
-                // Sync VR Rig to Physics Body
-                userGroup.position.copy(playerBody.position);
-                userGroup.position.y -= playerRadius; // Offset so rig stands on ground
-            }
+  for(let i=0;i<6;i++){
+    const a=(i/6)*Math.PI*2;
+    neonEdge(box(5,1,5,mats.purple,Math.cos(a)*18,3,Math.sin(a)*18),0xff2d78);
+  }
+  neonEdge(box(4,12,4,mats.metal,0,6,0,{hp:600}),0x00ffe7);
+  for(let i=0;i<8;i++){const a=(i/8)*Math.PI*2;spawnEnemy(Math.cos(a)*14,0,Math.sin(a)*14);}
+  spawnBoss(0,0,-18);
+}
 
-            // Step Physics
-            world.step(1/60, dt, 3);
+function buildSandbox() {
+  const fl = box(120,1,120,mats.floor,0,-0.5,0);
+  for(let i=-60;i<=60;i+=4){
+    box(120,0.02,0.03,new THREE.MeshBasicMaterial({color:0x00ffe7,transparent:true,opacity:0.04}),0,0.01,i,{np:true});
+    box(0.03,0.02,120,new THREE.MeshBasicMaterial({color:0x00ffe7,transparent:true,opacity:0.04}),i,0.01,0,{np:true});
+  }
+  box(120,6,1,mats.concrete,0,3,-62); box(120,6,1,mats.concrete,0,3,62);
+  box(1,6,120,mats.concrete,-62,3,0); box(1,6,120,mats.concrete,62,3,0);
 
-            // Handle Grabbed Object Physics Override & Throw Velocity
-            if (grabbedObject && grabHand) {
-                const handWorldPos = new THREE.Vector3();
-                const handWorldQuat = new THREE.Quaternion();
-                grabHand.getWorldPosition(handWorldPos);
-                grabHand.getWorldQuaternion(handWorldQuat);
+  // Sky
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(200,32,16), new THREE.MeshBasicMaterial({color:0x020307,side:THREE.BackSide}));
+  scene.add(sky);
+}
 
-                grabbedObject.mesh.position.copy(handWorldPos);
-                grabbedObject.mesh.quaternion.copy(handWorldQuat);
-                
-                // Calculate manual velocity for throwing
-                handVelocity.subVectors(handWorldPos, previousHandPos).divideScalar(dt);
-                previousHandPos.copy(handWorldPos);
-            }
+// Prop sizes
+const propSizes = {
+  barrel:[0.6,1.2,0.6],box:[1,1,1],sphere:[1,1,1],cylinder:[0.6,1.5,0.6],
+  crate:[1.2,1.2,1.2],ramp:[4,0.3,8],wall:[0.3,4,8],platform:[6,0.3,6],
+  pillar:[0.8,6,0.8],spring:[0.5,1.5,0.5],fan:[2,0.3,2],button:[0.6,0.3,0.6],
+  lamp:[0.3,2,0.3],default:[1,1,1],
+};
+const propColors = {
+  barrel:0x4a2800,box:0x334455,sphere:0x2244aa,cylinder:0x553322,
+  crate:0x664400,ramp:0x336644,wall:0x2a2a3a,platform:0x334455,
+  pillar:0x3a2a4a,spring:0x888800,fan:0x004488,button:0xcc2200,
+  lamp:0xddcc44,default:0x445566,
+};
 
-            // Sync Objects (Physics -> Graphics)
-            for (let id in networkObjects) {
-                const obj = networkObjects[id];
-                if (obj !== grabbedObject) {
-                    obj.mesh.position.copy(obj.body.position);
-                    obj.mesh.quaternion.copy(obj.body.quaternion);
-                }
-            }
+function spawnProp(type, x, y, z, isStatic=false) {
+  const sz = propSizes[type]||propSizes.default;
+  let geo;
+  if(type==='sphere') geo=new THREE.SphereGeometry(sz[0]/2,10,7);
+  else if(type==='cylinder') geo=new THREE.CylinderGeometry(sz[0]/2,sz[0]/2,sz[1],10);
+  else geo=new THREE.BoxGeometry(sz[0],sz[1],sz[2]);
+  const mesh=new THREE.Mesh(geo.clone(), new THREE.MeshLambertMaterial({color:propColors[type]||propColors.default}));
+  mesh.position.set(x,y,z); mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
+  if(type==='lamp'){const pl=new THREE.PointLight(0xffd600,2,7);pl.position.y=1;mesh.add(pl);}
+  const body=mkBody(mesh,{static:isStatic,size:new THREE.Vector3(...sz),vy:isStatic?0:0.5,type:'prop',hp:50,mass:isStatic?0:2});
+  G.objects.push({mesh,body,type}); return {mesh,body};
+}
 
-            // Network Broadcasting (Rate limited ~20Hz)
-            networkTick += dt;
-            if (networkTick > 0.05) {
-                networkTick = 0;
+function placeProFromRay() {
+  // Use right controller ray in VR, desktop raycast otherwise
+  let target;
+  if(G.inVR && ctrl[1].ray){
+    const origin=ctrl[1].ray.position.clone();
+    const dir=new THREE.Vector3(0,0,-1).applyQuaternion(ctrl[1].ray.quaternion);
+    const plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+    target=new THREE.Vector3(); new THREE.Ray(origin,dir).intersectPlane(plane,target);
+  } else {
+    raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
+    const plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+    target=new THREE.Vector3(); raycaster.ray.intersectPlane(plane,target);
+  }
+  if(!target) return;
+  if(G.snap){target.x=Math.round(target.x/2)*2;target.z=Math.round(target.z/2)*2;}
+  const sz=propSizes[G.selectedSpawn]||propSizes.default;
+  spawnProp(G.selectedSpawn,target.x,sz[1]/2+0.01,target.z,true);
+  notify('📦 Placed: '+G.selectedSpawn,'default');
+}
 
-                // Sync Local Player Avatar
-                if (myPeerId) {
-                    const hP = new THREE.Vector3(); const hQ = new THREE.Quaternion();
-                    const lP = new THREE.Vector3(); const lQ = new THREE.Quaternion();
-                    const rP = new THREE.Vector3(); const rQ = new THREE.Quaternion();
+// ═══════════════════════════════════════════════════════════════
+// STORY / DIALOG / TRIGGERS
+// ═══════════════════════════════════════════════════════════════
+const storyLines = [
+  {n:'VOID_AI',t:"VOID_LAB_01 online. Physics anomaly detected. Proceed with caution."},
+  {n:'VOID_AI',t:"Multiple corrupted entities in sector 3. Former drones — now loyal to the Warden."},
+  {n:'CORRUPTED WARDEN',t:"You shouldn't be here. This simulation belongs to me."},
+  {n:'VOID_AI',t:"Warden defeated. Collapse sequence halted... for now."},
+  {n:'VOID_AI',t:"Signal stabilized. Welcome to the Void, traveler."},
+];
 
-                    camera.getWorldPosition(hP); camera.getWorldQuaternion(hQ);
-                    controller2.getWorldPosition(lP); controller2.getWorldQuaternion(lQ);
-                    controller1.getWorldPosition(rP); controller1.getWorldQuaternion(rQ);
+function mkTrigger(x,y,z,r,cb) {
+  G.triggers.push({pos:new THREE.Vector3(x,y,z),r,cb,fired:false});
+}
 
-                    broadcast({
-                        type: 'PLAYER_SYNC',
-                        hP: hP.toArray(), hQ: hQ.toArray(),
-                        lP: lP.toArray(), lQ: lQ.toArray(),
-                        rP: rP.toArray(), rQ: rQ.toArray()
-                    });
-                }
+function checkTriggers() {
+  const ppos = G.inVR ? xrRig.position : player.pos;
+  G.triggers.forEach(t=>{
+    if(!t.fired && ppos.distanceTo(t.pos)<t.r){t.fired=true;t.cb();}
+  });
+}
 
-                // Sync owned objects
-                for (let id in networkObjects) {
-                    const obj = networkObjects[id];
-                    // Host syncs everything unowned, clients sync what they own (grabbed)
-                    if (obj.owner === myPeerId || (isHost && obj.owner === null)) {
-                        // Sleep check optimization
-                        if (obj.body.velocity.lengthSquared() > 0.01 || obj === grabbedObject) {
-                            broadcast({
-                                type: 'OBJ_SYNC',
-                                id: id,
-                                p: obj.mesh.position.toArray(),
-                                q: obj.mesh.quaternion.toArray(),
-                                v: obj.body.velocity.toArray()
-                            });
-                        }
-                    }
-                }
-            }
+function queueDialog(name,text) {
+  G.dialogQueue.push({name,text});
+  if(!G.dialogActive) processDialog();
+}
 
-            renderer.render(scene, camera);
-        });
+function processDialog() {
+  if(!G.dialogQueue.length){G.dialogActive=false;return;}
+  G.dialogActive=true;
+  const d=G.dialogQueue.shift();
+  // Flat UI
+  document.getElementById('dname').textContent=d.name;
+  document.getElementById('dtext').textContent='';
+  document.getElementById('dialog').classList.add('show');
+  let i=0;
+  const iv=setInterval(()=>{
+    document.getElementById('dtext').textContent+=d.text[i]; i++;
+    if(i>=d.text.length) clearInterval(iv);
+  },28);
+  // VR UI
+  if(G.inVR) showVRDialog(d.name,d.text);
+}
 
-        // Window Resizing
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-        
-        // Prevent context menu on right click
-        document.addEventListener('contextmenu', event => event.preventDefault());
+document.getElementById('dialog').addEventListener('click',()=>{
+  document.getElementById('dialog').classList.remove('show');
+  hideVRDialog();
+  setTimeout(processDialog,200);
+});
 
-    </script>
+function advanceStory() {
+  G.storyProgress++;
+  if(G.storyProgress<storyLines.length){
+    setTimeout(()=>queueDialog(storyLines[G.storyProgress].n,storyLines[G.storyProgress].t),1000);
+  }
+}
+
+// Boss bar
+function showBossBar(npc) {
+  let bb = document.getElementById('boss-bar');
+  if(!bb){
+    bb=document.createElement('div');bb.id='boss-bar';
+    bb.style.cssText='position:fixed;top:56px;left:50%;transform:translateX(-50%);width:380px;z-index:12;pointer-events:none;text-align:center';
+    bb.innerHTML=`<div id="bossname" style="font-family:Orbitron,monospace;font-size:11px;letter-spacing:4px;color:#ff2d78;margin-bottom:4px;text-shadow:0 0 8px #ff2d78">CORRUPTED WARDEN</div>
+    <div style="height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden"><div id="bossfill" style="height:100%;background:linear-gradient(90deg,#ff2d78,#ff6b35);width:100%;transition:width .4s;border-radius:3px"></div></div>`;
+    document.body.appendChild(bb);
+  }
+  bb.style.display='block'; G.bossNPC=npc;
+}
+function updateBossBar(n){const el=document.getElementById('bossfill');if(el)el.style.width=Math.max(0,n.hp/n.maxHp*100)+'%';}
+function hideBossBar(){const bb=document.getElementById('boss-bar');if(bb)bb.style.display='none';}
+
+// ═══════════════════════════════════════════════════════════════
+// HUD HELPERS
+// ═══════════════════════════════════════════════════════════════
+function setHUD(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
+function notify(msg,type='default'){
+  if(G.inVR) showVRNotif(msg, type==='warn'?'#ff2d78':type==='gold'?'#ffd600':'#00ffe7');
+  const s=document.getElementById('notifs');
+  const n=document.createElement('div');
+  n.className='notif'+(type==='warn'?' warn':type==='gold'?' gold':'');
+  n.textContent=msg; s.appendChild(n);
+  setTimeout(()=>n.remove(),3100);
+}
+function glitch(){
+  const el=document.getElementById('glitch'); el.classList.add('on');
+  setTimeout(()=>el.classList.remove('on'),500);
+}
+function showZone(name){
+  const el=document.getElementById('zonename'); el.textContent=name;
+  el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),3200);
+}
+function togglePause(){
+  if(!G.mode||G.inVR) return;
+  G.paused=!G.paused;
+  document.exitPointerLock();
+}
+
+function updateFlatHUD() {
+  if(G.inVR) return;
+  setHUD('hpv',Math.floor(G.hp));
+  document.getElementById('hpf').style.width=(G.hp/G.maxHp*100)+'%';
+  setHUD('env',Math.floor(G.energy));
+  document.getElementById('enf').style.width=(G.energy/G.maxEnergy*100)+'%';
+  setHUD('scorev',G.score);
+  setHUD('killsv',G.kills);
+  const el=G.elapsed, m=Math.floor(el/60), s=Math.floor(el%60);
+  setHUD('timev',`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GAME MODES
+// ═══════════════════════════════════════════════════════════════
+function startMode(mode) {
+  G.mode=mode; G.startTime=Date.now();
+  document.getElementById('main-menu').style.display='none';
+  if(!G.inVR){
+    document.getElementById('hud').style.display='block';
+    document.getElementById('crosshair').style.display='block';
+    document.getElementById('hotbar').style.display='flex';
+  }
+  const names={story:'STORY MODE',sandbox:'SANDBOX',arena:'COMBAT ARENA',debug:'PHYSICS LAB'};
+
+  if(mode==='story'){
+    buildLab(); player.pos.set(0,1.6,5); xrRig.position.set(0,0,5);
+    setHUD('zonev','VOID_LAB_01');
+    setTimeout(()=>showZone('VOID_LAB_01'),600);
+    setTimeout(()=>queueDialog('VOID_AI',storyLines[0].t),2000);
+  } else if(mode==='sandbox'){
+    buildSandbox(); player.pos.set(0,1.6,5); xrRig.position.set(0,0,5);
+    setHUD('zonev','SANDBOX_01');
+    setTimeout(()=>showZone('SANDBOX WORLD'),600);
+    notify('Right Trigger = shoot/place  |  A = interact  |  X = gravity pulse','default');
+    notify('Left Trigger = teleport arc  |  Squeeze = grab','default');
+  } else if(mode==='arena'){
+    buildArena(); player.pos.set(0,1.6,0); xrRig.position.set(0,0,0);
+    setHUD('zonev','COMBAT_ARENA');
+    setTimeout(()=>showZone('COMBAT ARENA'),600);
+    setTimeout(()=>queueDialog('VOID_AI',"Welcome to the arena. Only one leaves standing."),1500);
+  } else if(mode==='debug'){
+    buildSandbox(); player.pos.set(0,1.6,0); xrRig.position.set(0,0,0); player.flyMode=true;
+    setHUD('zonev','DEBUG_LAB');
+    for(let i=0;i<30;i++){
+      const t=['box','sphere','cylinder','barrel','crate'][Math.floor(Math.random()*5)];
+      spawnProp(t,(Math.random()-.5)*28,4+Math.random()*8,(Math.random()-.5)*28);
+    }
+    setTimeout(()=>showZone('PHYSICS DEBUG LAB'),600);
+  }
+  selectWeapon(0);
+}
+
+function returnMenu() {
+  G.mode=null; G.physBodies.length=0;
+  G.objects=[]; G.npcs=[]; G.projectiles=[]; G.particles=[]; G.triggers=[];
+  // Clear scene except lights
+  const keep=[ambient,sun,...scene.children.filter(c=>c instanceof THREE.PointLight),xrRig,arcLine,tpMarker,...ctrlGroup.map((_,i)=>renderer.xr.getController(i)),renderer.xr.getControllerGrip(0),renderer.xr.getControllerGrip(1)];
+  scene.children = scene.children.filter(c=>keep.includes(c)||c instanceof THREE.PointLight||c===ambient||c===sun||c===xrRig||c===arcLine||c===tpMarker);
+  // Re-add scene children that are needed
+  scene.add(ambient); scene.add(sun);
+  document.getElementById('hud').style.display='none';
+  document.getElementById('crosshair').style.display='none';
+  document.getElementById('hotbar').style.display='none';
+  document.getElementById('dialog').classList.remove('show');
+  document.getElementById('main-menu').style.display='flex';
+  document.exitPointerLock();
+  G.paused=false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WEBXR SESSION
+// ═══════════════════════════════════════════════════════════════
+async function checkXRSupport() {
+  if (!navigator.xr) { return false; }
+  try {
+    const ok = await navigator.xr.isSessionSupported('immersive-vr');
+    return ok;
+  } catch(e) { return false; }
+}
+
+async function enterVR() {
+  if (!navigator.xr) { notify('WebXR not available in this browser','warn'); return; }
+  try {
+    const session = await navigator.xr.requestSession('immersive-vr', {
+      requiredFeatures: ['local-floor'],
+      optionalFeatures: [
+        'bounded-floor',
+        'hand-tracking',
+        // Quest performance hints
+        'layers',
+      ],
+    });
+
+    renderer.xr.setSession(session);
+    G.inVR = true;
+
+    // Quest-specific: request foveation if available (reduces GPU cost)
+    if (session.updateRenderState) {
+      session.updateRenderState({
+        // depthFar for Quest
+        depthFar: 200,
+        depthNear: 0.05,
+      });
+    }
+    // Fixed foveation (Quest 2: 0–1 range, Quest 3 supports dynamic)
+    if (renderer.xr.getSession()?.updateRenderState) {
+      try {
+        renderer.xr.getSession().updateRenderState({ foveation: 0.8 });
+      } catch(_) {}
+    }
+
+    document.getElementById('vr-status').style.display = 'block';
+    hudMesh.visible = true;
+
+    // If no mode started yet, start story
+    if (!G.mode) startMode('story');
+
+    session.addEventListener('end', () => {
+      G.inVR = false;
+      hudMesh.visible = false;
+      document.getElementById('vr-status').style.display = 'none';
+      // Restore flat HUD
+      if (G.mode) {
+        document.getElementById('hud').style.display = 'block';
+        document.getElementById('crosshair').style.display = 'block';
+        document.getElementById('hotbar').style.display = 'flex';
+      }
+    });
+
+    notify('🥽 VR active — Quest controllers ready','gold');
+
+  } catch(e) {
+    notify('VR session error: ' + e.message, 'warn');
+    console.error('XR session failed:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AMBIENT / AMBIENT EFFECTS
+// ═══════════════════════════════════════════════════════════════
+let glitchTimer = 0;
+function updateAmbient(t) {
+  // Pulsing neon lights
+  scene.children.forEach(c => {
+    if (c instanceof THREE.PointLight && c.color.b < 0.9) {
+      c.intensity = Math.max(0, c.intensity + Math.sin(t*2+c.position.x)*0.006);
+    }
+  });
+  // Fog pulse
+  if (scene.fog) scene.fog.density = 0.02 + Math.sin(t*0.28)*0.004;
+  // Random glitch
+  glitchTimer -= 0.016;
+  if (glitchTimer <= 0 && G.mode==='story') { glitch(); glitchTimer = 8+Math.random()*20; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN LOOP
+// ═══════════════════════════════════════════════════════════════
+let lastT = 0;
+
+function loop(time, frame) {
+  const t = time / 1000;
+  let dt = Math.min(t - lastT, 0.05);
+  lastT = t;
+
+  if (!G.mode) { renderer.render(scene, camera); return; }
+  if (G.paused && !G.inVR) { renderer.render(scene, camera); return; }
+
+  G.elapsed = (Date.now() - G.startTime) / 1000;
+
+  // Poll XR controllers
+  if (G.inVR) {
+    pollXRControllers();
+    updateVRGrabs();
+    if (snapTimer > 0) snapTimer -= dt;
+    // Update wrist HUD
+    buildVRHUD();
+    // VR notif timer
+    if (vrNotifTimer > 0) {
+      vrNotifTimer -= dt;
+      if (vrNotifTimer <= 0) vrNotifMesh.visible = false;
+    }
+  } else {
+    stepDesktopPlayer(dt);
+  }
+
+  stepPhysics(dt);
+  stepNPCs(dt);
+  stepProjectiles(dt);
+  stepParticles(dt);
+  checkTriggers();
+  updateFlatHUD();
+  updateAmbient(t);
+
+  // Energy regen
+  if (G.energy < G.maxEnergy) G.energy = Math.min(G.maxEnergy, G.energy + 8*dt);
+
+  renderer.render(scene, camera);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════
+const BOOT_STEPS = [
+  'INITIALIZING THREE.JS r128...',
+  'CONFIGURING WebXR RENDERER...',
+  'DETECTING QUEST HARDWARE...',
+  'BUILDING PHYSICS ENGINE...',
+  'LOADING NEON SHADER ARRAYS...',
+  'SPAWNING ENTITY SYSTEMS...',
+  'SETTING UP XR CONTROLLER MAPS...',
+  'COMPILING WORLD GEOMETRY...',
+  'CHECKING QUEST 2 / 3 SUPPORT...',
+  'VOIDFRAME READY.',
+];
+
+async function waitForThree() {
+  let attempts = 0;
+  while (typeof THREE === 'undefined' && attempts < 100) {
+    await new Promise(r => setTimeout(r, 100));
+    attempts++;
+  }
+  if (typeof THREE === 'undefined') {
+    document.getElementById('lstatus').textContent = '❌ THREE.JS FAILED TO LOAD — CHECK YOUR CONNECTION';
+    document.getElementById('lstatus').style.color = '#ff2d78';
+    return false;
+  }
+  return true;
+}
+
+async function boot() {
+  const bar = document.getElementById('lbar');
+  const status = document.getElementById('lstatus');
+
+  status.textContent = 'LOADING THREE.JS...';
+  const ok = await waitForThree();
+  if (!ok) return;
+
+  // Now safe to init renderer and scene
+  initEngine();
+
+  for (let i = 0; i < BOOT_STEPS.length; i++) {
+    status.textContent = BOOT_STEPS[i];
+    bar.style.width = ((i+1)/BOOT_STEPS.length*100) + '%';
+    await new Promise(r => setTimeout(r, 180 + Math.random()*250));
+  }
+
+  // Check XR (button always visible — let user try regardless)
+  const xrOk = await checkXRSupport();
+  status.textContent = xrOk ? '✓ QUEST 2/3 WebXR DETECTED' : '⚠ WebXR may not be available — try anyway';
+
+  await new Promise(r => setTimeout(r, 400));
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('main-menu').style.display = 'flex';
+
+  // Setup XR controllers (must be done after renderer is ready)
+  setupXRControllers();
+}
+
+boot();
+</script>
 </body>
 </html>
