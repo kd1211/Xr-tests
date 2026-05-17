@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APE ESCAPE VR</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; overflow: hidden; font-family: monospace; }
+  #overlay {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: linear-gradient(160deg, #0a0a0a 0%, #1a0f00 50%, #0a0a0a 100%);
+    color: #f5a623;
+  }
+  #overlay h1 {
+    font-size: 4rem; font-weight: 900; letter-spacing: 0.15em;
+    text-transform: uppercase;
+    text-shadow: 0 0 40px #f5a62388, 0 0 80px #f5a62322;
+    margin-bottom: 0.25rem;
+  }
+  #overlay p { color: #888; font-size: 0.9rem; letter-spacing: 0.2em; margin-bottom: 3rem; }
+  #enter-vr-btn {
+    background: #f5a623; color: #000;
+    border: none; padding: 1rem 3rem;
+    font-size: 1.1rem; font-weight: 900;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    cursor: pointer; border-radius: 4px;
+    box-shadow: 0 0 30px #f5a62366;
+    transition: all 0.2s;
+  }
+  #enter-vr-btn:hover { transform: scale(1.05); box-shadow: 0 0 50px #f5a623aa; }
+  #status { margin-top: 1.5rem; color: #555; font-size: 0.75rem; letter-spacing: 0.1em; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <h1>APE ESCAPE</h1>
+  <p>ARM-LOCOMOTION · GORILLA PHYSICS · VR ONLY</p>
+  <button id="enter-vr-btn">ENTER VR</button>
+  <div id="status">Quest 2 / 3 / Pro recommended · WebXR required</div>
+</div>
+
+<script type="module">
+// ─── Three.js + WebXR via CDN ───────────────────────────────────────────────
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const overlay = document.getElementById('overlay');
+const btn = document.getElementById('enter-vr-btn');
+const statusEl = document.getElementById('status');
+
+// ─── Renderer ────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+document.body.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── Scene & Camera ───────────────────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a2a1a);
+scene.fog = new THREE.Fog(0x1a2a1a, 20, 80);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 200);
+
+// XR player rig
+const playerRig = new THREE.Group();
+playerRig.position.set(0, 0, 5);
+scene.add(playerRig);
+playerRig.add(camera);
+
+// ─── Lighting ─────────────────────────────────────────────────────────────────
+const ambient = new THREE.AmbientLight(0x224422, 1.5);
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(0xffe0a0, 3);
+sun.position.set(20, 40, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 150;
+sun.shadow.camera.left = -50;
+sun.shadow.camera.right = 50;
+sun.shadow.camera.top = 50;
+sun.shadow.camera.bottom = -50;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x4488ff, 0.5);
+fill.position.set(-10, 10, -10);
+scene.add(fill);
+
+// ─── Materials ────────────────────────────────────────────────────────────────
+const mats = {
+  ground:   new THREE.MeshLambertMaterial({ color: 0x3a5c2a }),
+  platform: new THREE.MeshLambertMaterial({ color: 0x5c3a2a }),
+  tree:     new THREE.MeshLambertMaterial({ color: 0x4a3010 }),
+  leaves:   new THREE.MeshLambertMaterial({ color: 0x2d6e1a }),
+  gorilla:  new THREE.MeshLambertMaterial({ color: 0x2a1a0a }),
+  hand:     new THREE.MeshLambertMaterial({ color: 0x2a1a0a }),
+  rock:     new THREE.MeshLambertMaterial({ color: 0x7a7060 }),
+  sky:      new THREE.MeshBasicMaterial({ color: 0x6cb8ff, side: THREE.BackSide }),
+};
+
+// ─── Sky dome ─────────────────────────────────────────────────────────────────
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(150, 16, 8), mats.sky);
+scene.add(skyDome);
+
+// ─── Ground ───────────────────────────────────────────────────────────────────
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200, 20, 20),
+  mats.ground
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+ground.userData.isGround = true;
+scene.add(ground);
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function box(w, h, d, mat, rx=0, ry=0, rz=0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.castShadow = true; m.receiveShadow = true;
+  m.rotation.set(rx, ry, rz);
+  return m;
+}
+function cyl(rt, rb, h, seg, mat) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function sph(r, mat) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), mat);
+  m.castShadow = true;
+  return m;
+}
+
+// ─── Platforms (grabbable/climbable surfaces) ─────────────────────────────────
+const platforms = [];
+
+function addPlatform(x, y, z, w, d, rotY=0) {
+  const p = box(w, 0.4, d, mats.platform);
+  p.position.set(x, y, z);
+  p.rotation.y = rotY;
+  p.userData.isGrabbable = true;
+  scene.add(p);
+  platforms.push(p);
+  return p;
+}
+
+// Ground-level rocks/stumps
+addPlatform(0, 0, 0, 30, 30); // main ground zone (fake, use ground)
+
+// Platforms scattered around
+addPlatform( 5,  1.5,  0,  3, 2);
+addPlatform( 8,  3,  -3,  2.5, 2);
+addPlatform( 4,  4.5, -6,  2, 2.5);
+addPlatform(-2,  6, -8,   3, 2);
+addPlatform(-6,  8, -5,   2, 2);
+addPlatform(-8,  10, -2,  2.5, 2);
+addPlatform(-5,  12,  2,  3, 2);
+addPlatform( 2,  14,  4,  2, 2);
+addPlatform( 7,  11,  5,  2, 2.5);
+addPlatform( 3,  8,   8,  3, 2);
+addPlatform(-3,  5,   6,  2, 2);
+addPlatform(12,  2,   3,  2, 2);
+addPlatform(15,  4,   0,  2.5, 2);
+addPlatform(12,  6,  -4,  2, 2);
+addPlatform(-12, 3,   2,  2.5, 2);
+addPlatform(-15, 5,   5,  2, 2);
+addPlatform(-10, 7,   8,  3, 2);
+addPlatform( 0,  16, -10, 4, 3);  // high platform
+
+// ─── Trees ────────────────────────────────────────────────────────────────────
+function addTree(x, z, h=6) {
+  const trunk = cyl(0.25, 0.35, h, 6, mats.tree);
+  trunk.position.set(x, h/2, z);
+  trunk.userData.isGrabbable = true;
+  scene.add(trunk);
+  platforms.push(trunk);
+
+  const canopy = sph(1.8 + Math.random(), mats.leaves);
+  canopy.position.set(x, h + 1.2, z);
+  canopy.userData.isGrabbable = true;
+  scene.add(canopy);
+  platforms.push(canopy);
+}
+
+const treePositions = [
+  [3, -8], [-4, -10], [8, -12], [-8, -7], [0, -15],
+  [12, 8], [-12, 10], [6, 12], [-6, 15], [15, -5],
+  [-15, -8], [0, 20], [10, 18], [-10, 18], [5, -18],
+  [18, 2], [-18, -2], [2, -20], [-2, 20], [14, 14],
+];
+for (const [x, z] of treePositions) {
+  addTree(x, z, 5 + Math.random() * 5);
+}
+
+// ─── Rocks ────────────────────────────────────────────────────────────────────
+for (let i = 0; i < 30; i++) {
+  const rock = sph(0.3 + Math.random() * 0.5, mats.rock);
+  const rx = (Math.random() - 0.5) * 40;
+  const rz = (Math.random() - 0.5) * 40;
+  rock.position.set(rx, 0.2, rz);
+  rock.scale.y = 0.6 + Math.random() * 0.4;
+  rock.scale.x = 0.7 + Math.random() * 0.6;
+  rock.userData.isGrabbable = true;
+  scene.add(rock);
+  platforms.push(rock);
+}
+
+// ─── Gorilla body (player avatar hands) ───────────────────────────────────────
+// Hands / fists — attached to XR controllers
+const handGeo = new THREE.BoxGeometry(0.08, 0.08, 0.1);
+const handL = new THREE.Mesh(handGeo, mats.hand);
+const handR = new THREE.Mesh(handGeo, mats.hand);
+scene.add(handL, handR);
+
+// ─── XR Controllers ───────────────────────────────────────────────────────────
+const ctrlL = renderer.xr.getController(0);
+const ctrlR = renderer.xr.getController(1);
+playerRig.add(ctrlL, ctrlR);
+
+const gripL = renderer.xr.getControllerGrip(0);
+const gripR = renderer.xr.getControllerGrip(1);
+playerRig.add(gripL, gripR);
+
+// ─── Physics / locomotion state ───────────────────────────────────────────────
+const gravity = -14;
+const velY = { val: 0 };
+let onGround = false;
+const playerHeight = 1.65;
+
+// Grab state per hand
+const grabState = {
+  left:  { active: false, grabWorldPos: new THREE.Vector3(), handPrevWorld: new THREE.Vector3() },
+  right: { active: false, grabWorldPos: new THREE.Vector3(), handPrevWorld: new THREE.Vector3() },
+};
+
+// Velocity for arm-pumping locomotion
+const velocity = new THREE.Vector3();
+const tmpVec = new THREE.Vector3();
+const prevPosL = new THREE.Vector3();
+const prevPosR = new THREE.Vector3();
+const worldPosL = new THREE.Vector3();
+const worldPosR = new THREE.Vector3();
+
+// Raycaster for ground check
+const downRay = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 3);
+
+// ─── Controller event helpers ─────────────────────────────────────────────────
+function getHandSide(ctrl) {
+  // controller index 0 = left, 1 = right on Quest
+  return ctrlL === ctrl ? 'left' : 'right';
+}
+
+function onSelectStart(e) {
+  // squeeze/grip starts a grab
+}
+
+function onGrip(ctrl, pressed) {
+  const side = getHandSide(ctrl);
+  const gs = grabState[side];
+  const grip = side === 'left' ? gripL : gripR;
+
+  if (pressed) {
+    // Check if near a grabbable surface
+    grip.getWorldPosition(worldPosL); // reuse worldPosL temporarily
+    const grabPos = worldPosL.clone();
+
+    // Find nearest grabbable
+    let nearest = null, nearestDist = 0.6; // grab radius
+    for (const obj of platforms) {
+      if (!obj.userData.isGrabbable) continue;
+      obj.getWorldPosition(tmpVec);
+      const dist = grabPos.distanceTo(tmpVec);
+      // for box-shaped platforms use a generous check
+      const obb = 1.5; // rough extend
+      if (dist < nearestDist + obb) {
+        nearest = obj;
+        nearestDist = dist;
+      }
+    }
+    // Also grab ground
+    if (grabPos.y < 1.0) nearest = ground;
+
+    if (nearest) {
+      gs.active = true;
+      gs.grabWorldPos.copy(grabPos);
+      grip.getWorldPosition(gs.handPrevWorld);
+    }
+  } else {
+    if (gs.active) {
+      // On release: give velocity from last hand movement
+      // already accumulated in velocity
+    }
+    gs.active = false;
+  }
+}
+
+// Map squeeze buttons
+ctrlL.addEventListener('squeezestart', () => onGrip(ctrlL, true));
+ctrlL.addEventListener('squeezeend',   () => onGrip(ctrlL, false));
+ctrlR.addEventListener('squeezestart', () => onGrip(ctrlR, true));
+ctrlR.addEventListener('squeezeend',   () => onGrip(ctrlR, false));
+
+// Also use selectstart/end (trigger) as grab
+ctrlL.addEventListener('selectstart', () => onGrip(ctrlL, true));
+ctrlL.addEventListener('selectend',   () => onGrip(ctrlL, false));
+ctrlR.addEventListener('selectstart', () => onGrip(ctrlR, true));
+ctrlR.addEventListener('selectend',   () => onGrip(ctrlR, false));
+
+// ─── Enter VR button ─────────────────────────────────────────────────────────
+btn.addEventListener('click', async () => {
+  if (!navigator.xr) {
+    statusEl.textContent = '⚠ WebXR not available on this browser/device';
+    return;
+  }
+  const supported = await navigator.xr.isSessionSupported('immersive-vr');
+  if (!supported) {
+    statusEl.textContent = '⚠ Immersive VR not supported. Use a Quest browser.';
+    return;
+  }
+  const session = await navigator.xr.requestSession('immersive-vr', {
+    requiredFeatures: ['local-floor'],
+    optionalFeatures: ['hand-tracking', 'bounded-floor'],
+  });
+  renderer.xr.setSession(session);
+  overlay.style.display = 'none';
+});
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const _v3 = new THREE.Vector3();
+const _q  = new THREE.Quaternion();
+const _m  = new THREE.Matrix4();
+
+function rigWorldPos() {
+  return playerRig.position;
+}
+
+// ─── Main loop ────────────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // ── Update hand meshes to grip positions ──
+  gripL.getWorldPosition(worldPosL);
+  gripR.getWorldPosition(worldPosR);
+  handL.position.copy(worldPosL);
+  handR.position.copy(worldPosR);
+  gripL.getWorldQuaternion(_q); handL.quaternion.copy(_q);
+  gripR.getWorldQuaternion(_q); handR.quaternion.copy(_q);
+
+  // ── Arm locomotion ────────────────────────────────────────────────────────
+  // When a hand is grabbing: the world point under the hand stays fixed,
+  // so we MOVE the rig in the opposite direction of hand motion.
+
+  let anyGrab = false;
+
+  for (const side of ['left', 'right']) {
+    const gs = grabState[side];
+    if (!gs.active) continue;
+    anyGrab = true;
+
+    const grip = side === 'left' ? gripL : gripR;
+    grip.getWorldPosition(_v3);
+
+    // delta = current hand world pos - previous
+    const delta = _v3.clone().sub(gs.handPrevWorld);
+
+    // Move rig OPPOSITE to hand delta (as if pushing off world)
+    playerRig.position.sub(delta);
+
+    // Accumulate velocity from this push (for momentum on release)
+    velocity.sub(delta.multiplyScalar(1 / dt * 0.5));
+
+    gs.handPrevWorld.copy(_v3);
+  }
+
+  // ── Apply velocity & gravity ──────────────────────────────────────────────
+  if (!anyGrab) {
+    // Dampen lateral velocity
+    velocity.x *= 0.88;
+    velocity.z *= 0.88;
+    // Clamp max speed
+    const hspd = Math.sqrt(velocity.x**2 + velocity.z**2);
+    if (hspd > 8) { velocity.x *= 8/hspd; velocity.z *= 8/hspd; }
+  } else {
+    velocity.set(0, 0, 0);
+  }
+
+  // Gravity
+  velocity.y += gravity * dt;
+  playerRig.position.y += velocity.y * dt;
+
+  // ── Ground collision ──────────────────────────────────────────────────────
+  // Simple flat ground at y=0; player feet = rig.y
+  if (playerRig.position.y < 0) {
+    playerRig.position.y = 0;
+    velocity.y = 0;
+    onGround = true;
+  } else {
+    onGround = false;
+  }
+
+  // Lateral velocity apply
+  playerRig.position.x += velocity.x * dt;
+  playerRig.position.z += velocity.z * dt;
+
+  // ── Platform collision (simple AABB y-check) ──────────────────────────────
+  for (const plat of platforms) {
+    if (!plat.userData.isGrabbable) continue;
+    const pp = new THREE.Vector3();
+    plat.getWorldPosition(pp);
+    const dx = Math.abs(playerRig.position.x - pp.x);
+    const dz = Math.abs(playerRig.position.z - pp.z);
+    const geo = plat.geometry;
+    const params = geo.parameters || {};
+    const hw = (params.width || params.radiusTop || 0.5) * 0.5 + 0.3;
+    const hd = (params.depth || params.radiusTop || 0.5) * 0.5 + 0.3;
+    const ht = (params.height || 0.4) * 0.5;
+    if (dx < hw + 0.2 && dz < hd + 0.2) {
+      const platTop = pp.y + ht;
+      if (playerRig.position.y < platTop + 0.3 && playerRig.position.y > platTop - 0.8) {
+        playerRig.position.y = platTop;
+        velocity.y = 0;
+        onGround = true;
+      }
+    }
+  }
+
+  // ── Animate leaves swaying ────────────────────────────────────────────────
+  // (subtle, skip for perf in VR)
+
+  renderer.render(scene, camera);
+});
+
+// ─── Non-XR preview (mouse look on desktop) ───────────────────────────────────
+let mouseX = 0, mouseY = 0;
+document.addEventListener('mousemove', e => {
+  if (!renderer.xr.isPresenting) {
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  }
+});
+</script>
+
+</body>
+</html>
