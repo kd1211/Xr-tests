@@ -1,463 +1,769 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>APE ESCAPE VR</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #111; overflow: hidden; font-family: monospace; }
-  #overlay {
-    position: fixed; inset: 0; z-index: 10;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    background: linear-gradient(160deg, #0a0a0a 0%, #1a0f00 50%, #0a0a0a 100%);
-    color: #f5a623;
-  }
-  #overlay h1 {
-    font-size: 4rem; font-weight: 900; letter-spacing: 0.15em;
-    text-transform: uppercase;
-    text-shadow: 0 0 40px #f5a62388, 0 0 80px #f5a62322;
-    margin-bottom: 0.25rem;
-  }
-  #overlay p { color: #888; font-size: 0.9rem; letter-spacing: 0.2em; margin-bottom: 3rem; }
-  #enter-vr-btn {
-    background: #f5a623; color: #000;
-    border: none; padding: 1rem 3rem;
-    font-size: 1.1rem; font-weight: 900;
-    letter-spacing: 0.15em; text-transform: uppercase;
-    cursor: pointer; border-radius: 4px;
-    box-shadow: 0 0 30px #f5a62366;
-    transition: all 0.2s;
-  }
-  #enter-vr-btn:hover { transform: scale(1.05); box-shadow: 0 0 50px #f5a623aa; }
-  #status { margin-top: 1.5rem; color: #555; font-size: 0.75rem; letter-spacing: 0.1em; }
-  canvas { display: block; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Yeeps-Inspired VR Sandbox</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050510;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #0ff;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 15, 30, 0.85);
+            padding: 20px;
+            border: 2px solid #0ff;
+            border-radius: 12px;
+            box-shadow: 0 0 15px #0ff, inset 0 0 10px #0ff;
+            backdrop-filter: blur(5px);
+            width: 300px;
+            pointer-events: auto;
+        }
+        h2 {
+            margin: 0 0 15px 0;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+            text-shadow: 0 0 5px #0ff;
+        }
+        .status { margin-bottom: 15px; font-size: 0.9rem; word-break: break-all; }
+        .peer-id { font-weight: bold; color: #f0f; text-shadow: 0 0 5px #f0f; font-size: 1.1rem; }
+        
+        input[type="text"] {
+            width: calc(100% - 22px);
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff;
+            border: 1px solid #0ff;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            outline: none;
+        }
+        input[type="text"]:focus { box-shadow: 0 0 8px #0ff; }
+        
+        button {
+            width: 100%;
+            background: transparent;
+            color: #0ff;
+            border: 2px solid #0ff;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #0ff;
+            color: #000;
+            box-shadow: 0 0 10px #0ff;
+        }
+        
+        #controls-info {
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-top: 15px;
+            line-height: 1.4;
+            border-top: 1px solid rgba(0, 255, 255, 0.3);
+            padding-top: 10px;
+        }
+        .highlight { color: #0ff; }
+
+        /* Crosshair for desktop */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background: transparent;
+            border: 2px solid #0ff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5;
+            pointer-events: none;
+            display: none;
+        }
+    </style>
+    <!-- PeerJS for WebRTC Multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    
+    <!-- Import Maps for Three.js and Cannon-es -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+            }
+        }
+    </script>
 </head>
 <body>
+    <div id="ui-layer">
+        <h2>VR Sandbox</h2>
+        <div class="status">Your ID: <br><span id="my-id" class="peer-id">Connecting...</span></div>
+        <div class="status">Status: <span id="conn-status" style="color:#ff0">Offline</span></div>
+        
+        <input type="text" id="friend-id" placeholder="Enter Host ID to Join">
+        <button id="join-btn">Join Lobby</button>
+        <button id="desktop-play-btn">Play (Desktop)</button>
+        
+        <div id="controls-info">
+            <strong>Desktop:</strong> WASD to move, Space to Jump. Click to lock mouse. Left Click to Spawn Box, Right Click to Grab.<br><br>
+            <strong>VR:</strong> Left Stick to Move/Jump. Right Stick to Turn. Right Trigger to Spawn. Grip to Grab.
+        </div>
+    </div>
+    <div id="crosshair"></div>
 
-<div id="overlay">
-  <h1>APE ESCAPE</h1>
-  <p>ARM-LOCOMOTION · GORILLA PHYSICS · VR ONLY</p>
-  <button id="enter-vr-btn">ENTER VR</button>
-  <div id="status">Quest 2 / 3 / Pro recommended · WebXR required</div>
-</div>
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import * as CANNON from 'cannon-es';
 
-<script type="module">
-// ─── Three.js + WebXR via CDN ───────────────────────────────────────────────
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+        // ==========================================
+        // 1. ENGINE & GRAPHICS SETUP
+        // ==========================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.Fog(0x0a0a1a, 10, 100);
 
-const overlay = document.getElementById('overlay');
-const btn = document.getElementById('enter-vr-btn');
-const statusEl = document.getElementById('status');
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        // VR Locomotion Group
+        const userGroup = new THREE.Group();
+        userGroup.position.set(0, 1.6, 0); // Start position
+        scene.add(userGroup);
+        userGroup.add(camera);
 
-// ─── Renderer ────────────────────────────────────────────────────────────────
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.xr.enabled = true;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
-document.body.appendChild(renderer.domElement);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.xr.enabled = true;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+        document.body.appendChild(VRButton.createButton(renderer));
 
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+        // Lighting
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x4444ff, 0.4);
+        scene.add(hemiLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(20, 50, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.camera.top = 50;
+        dirLight.shadow.camera.bottom = -50;
+        dirLight.shadow.camera.left = -50;
+        dirLight.shadow.camera.right = 50;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
 
-// ─── Scene & Camera ───────────────────────────────────────────────────────────
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a2a1a);
-scene.fog = new THREE.Fog(0x1a2a1a, 20, 80);
+        // Grid/Environment
+        const gridHelper = new THREE.GridHelper(200, 100, 0x00ffff, 0x003333);
+        gridHelper.position.y = 0.01;
+        scene.add(gridHelper);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 200);
+        // ==========================================
+        // 2. PHYSICS SETUP (CANNON-ES)
+        // ==========================================
+        const world = new CANNON.World({
+            gravity: new CANNON.Vec3(0, -15, 0), // Snappy gravity
+        });
+        world.broadphase = new CANNON.SAPBroadphase(world);
+        world.solver.iterations = 10;
 
-// XR player rig
-const playerRig = new THREE.Group();
-playerRig.position.set(0, 0, 5);
-scene.add(playerRig);
-playerRig.add(camera);
+        // Physics Materials
+        const physicsMaterial = new CANNON.Material("standard");
+        const physicsContactMaterial = new CANNON.ContactMaterial(physicsMaterial, physicsMaterial, {
+            friction: 0.1,
+            restitution: 0.2
+        });
+        world.addContactMaterial(physicsContactMaterial);
 
-// ─── Lighting ─────────────────────────────────────────────────────────────────
-const ambient = new THREE.AmbientLight(0x224422, 1.5);
-scene.add(ambient);
+        // Ground Physics
+        const groundBody = new CANNON.Body({
+            type: CANNON.Body.STATIC,
+            shape: new CANNON.Plane(),
+            material: physicsMaterial
+        });
+        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+        world.addBody(groundBody);
 
-const sun = new THREE.DirectionalLight(0xffe0a0, 3);
-sun.position.set(20, 40, 10);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.near = 0.5;
-sun.shadow.camera.far = 150;
-sun.shadow.camera.left = -50;
-sun.shadow.camera.right = 50;
-sun.shadow.camera.top = 50;
-sun.shadow.camera.bottom = -50;
-scene.add(sun);
+        // Visual Ground
+        const groundGeo = new THREE.PlaneGeometry(200, 200);
+        const groundMat = new THREE.MeshStandardMaterial({ 
+            color: 0x111111, 
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+        groundMesh.rotation.x = -Math.PI / 2;
+        groundMesh.receiveShadow = true;
+        scene.add(groundMesh);
 
-const fill = new THREE.DirectionalLight(0x4488ff, 0.5);
-fill.position.set(-10, 10, -10);
-scene.add(fill);
+        // Player Physics Body (Capsule/Sphere for movement)
+        const playerRadius = 0.4;
+        const playerBody = new CANNON.Body({
+            mass: 50,
+            shape: new CANNON.Sphere(playerRadius),
+            position: new CANNON.Vec3(0, 5, 0),
+            material: physicsMaterial,
+            linearDamping: 0.9,
+            fixedRotation: true
+        });
+        world.addBody(playerBody);
 
-// ─── Materials ────────────────────────────────────────────────────────────────
-const mats = {
-  ground:   new THREE.MeshLambertMaterial({ color: 0x3a5c2a }),
-  platform: new THREE.MeshLambertMaterial({ color: 0x5c3a2a }),
-  tree:     new THREE.MeshLambertMaterial({ color: 0x4a3010 }),
-  leaves:   new THREE.MeshLambertMaterial({ color: 0x2d6e1a }),
-  gorilla:  new THREE.MeshLambertMaterial({ color: 0x2a1a0a }),
-  hand:     new THREE.MeshLambertMaterial({ color: 0x2a1a0a }),
-  rock:     new THREE.MeshLambertMaterial({ color: 0x7a7060 }),
-  sky:      new THREE.MeshBasicMaterial({ color: 0x6cb8ff, side: THREE.BackSide }),
-};
+        // Static Level Geometry (Parkour elements)
+        function createStaticPlatform(x, y, z, w, h, d, color) {
+            const body = new CANNON.Body({
+                type: CANNON.Body.STATIC,
+                shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)),
+                position: new CANNON.Vec3(x, y, z),
+                material: physicsMaterial
+            });
+            world.addBody(body);
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(w, h, d),
+                new THREE.MeshStandardMaterial({ color: color, roughness: 0.5 })
+            );
+            mesh.position.copy(body.position);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+        }
+        
+        // Spawn some parkour platforms
+        createStaticPlatform(0, 2, -10, 4, 1, 4, 0xff0055);
+        createStaticPlatform(5, 4, -15, 3, 1, 3, 0x00ffaa);
+        createStaticPlatform(10, 6, -10, 3, 1, 3, 0xffff00);
+        createStaticPlatform(15, 8, -5, 2, 1, 2, 0xff00ff);
 
-// ─── Sky dome ─────────────────────────────────────────────────────────────────
-const skyDome = new THREE.Mesh(new THREE.SphereGeometry(150, 16, 8), mats.sky);
-scene.add(skyDome);
+        // Sandbox Objects Management
+        const networkObjects = {}; // id -> {mesh, body}
+        
+        function spawnPhysicalBox(id, x, y, z, color, isLocal = false) {
+            if (networkObjects[id]) return; // Already exists
 
-// ─── Ground ───────────────────────────────────────────────────────────────────
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(200, 200, 20, 20),
-  mats.ground
-);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-ground.userData.isGround = true;
-scene.add(ground);
+            const size = 0.6;
+            const body = new CANNON.Body({
+                mass: 2,
+                shape: new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2)),
+                position: new CANNON.Vec3(x, y, z),
+                material: physicsMaterial
+            });
+            
+            // Only host simulates full physics, clients sync transforms to avoid desync
+            // But for this P2P demo, everyone simulates to keep it responsive, host acts as authority
+            world.addBody(body);
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function box(w, h, d, mat, rx=0, ry=0, rz=0) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  m.castShadow = true; m.receiveShadow = true;
-  m.rotation.set(rx, ry, rz);
-  return m;
-}
-function cyl(rt, rb, h, seg, mat) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
-  m.castShadow = true; m.receiveShadow = true;
-  return m;
-}
-function sph(r, mat) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), mat);
-  m.castShadow = true;
-  return m;
-}
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(size, size, size),
+                new THREE.MeshStandardMaterial({ 
+                    color: color,
+                    emissive: color,
+                    emissiveIntensity: 0.2,
+                    roughness: 0.4
+                })
+            );
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
 
-// ─── Platforms (grabbable/climbable surfaces) ─────────────────────────────────
-const platforms = [];
+            networkObjects[id] = { body, mesh, owner: isLocal ? myPeerId : null };
+            
+            if (isLocal) {
+                broadcast({ type: 'SPAWN', id, pos: [x,y,z], color });
+            }
+        }
 
-function addPlatform(x, y, z, w, d, rotY=0) {
-  const p = box(w, 0.4, d, mats.platform);
-  p.position.set(x, y, z);
-  p.rotation.y = rotY;
-  p.userData.isGrabbable = true;
-  scene.add(p);
-  platforms.push(p);
-  return p;
-}
+        // ==========================================
+        // 3. VR CONTROLLERS & DESKTOP CONTROLS
+        // ==========================================
+        let isDesktop = false;
+        const desktopControls = new PointerLockControls(camera, document.body);
+        
+        document.getElementById('desktop-play-btn').addEventListener('click', () => {
+            isDesktop = true;
+            desktopControls.lock();
+            document.getElementById('ui-layer').style.display = 'none';
+            document.getElementById('crosshair').style.display = 'block';
+        });
 
-// Ground-level rocks/stumps
-addPlatform(0, 0, 0, 30, 30); // main ground zone (fake, use ground)
+        desktopControls.addEventListener('unlock', () => {
+            document.getElementById('ui-layer').style.display = 'block';
+            document.getElementById('crosshair').style.display = 'none';
+        });
 
-// Platforms scattered around
-addPlatform( 5,  1.5,  0,  3, 2);
-addPlatform( 8,  3,  -3,  2.5, 2);
-addPlatform( 4,  4.5, -6,  2, 2.5);
-addPlatform(-2,  6, -8,   3, 2);
-addPlatform(-6,  8, -5,   2, 2);
-addPlatform(-8,  10, -2,  2.5, 2);
-addPlatform(-5,  12,  2,  3, 2);
-addPlatform( 2,  14,  4,  2, 2);
-addPlatform( 7,  11,  5,  2, 2.5);
-addPlatform( 3,  8,   8,  3, 2);
-addPlatform(-3,  5,   6,  2, 2);
-addPlatform(12,  2,   3,  2, 2);
-addPlatform(15,  4,   0,  2.5, 2);
-addPlatform(12,  6,  -4,  2, 2);
-addPlatform(-12, 3,   2,  2.5, 2);
-addPlatform(-15, 5,   5,  2, 2);
-addPlatform(-10, 7,   8,  3, 2);
-addPlatform( 0,  16, -10, 4, 3);  // high platform
+        // Desktop Input state
+        const keys = { w: false, a: false, s: false, d: false, space: false };
+        document.addEventListener('keydown', (e) => {
+            if(e.code === 'KeyW') keys.w = true;
+            if(e.code === 'KeyA') keys.a = true;
+            if(e.code === 'KeyS') keys.s = true;
+            if(e.code === 'KeyD') keys.d = true;
+            if(e.code === 'Space') {
+                if(playerBody.position.y < playerRadius + 0.5) {
+                    playerBody.velocity.y = 8; // Jump
+                }
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            if(e.code === 'KeyW') keys.w = false;
+            if(e.code === 'KeyA') keys.a = false;
+            if(e.code === 'KeyS') keys.s = false;
+            if(e.code === 'KeyD') keys.d = false;
+        });
 
-// ─── Trees ────────────────────────────────────────────────────────────────────
-function addTree(x, z, h=6) {
-  const trunk = cyl(0.25, 0.35, h, 6, mats.tree);
-  trunk.position.set(x, h/2, z);
-  trunk.userData.isGrabbable = true;
-  scene.add(trunk);
-  platforms.push(trunk);
+        // VR Controllers
+        const controller1 = renderer.xr.getController(0); // Right Hand
+        const controller2 = renderer.xr.getController(1); // Left Hand
+        userGroup.add(controller1);
+        userGroup.add(controller2);
 
-  const canopy = sph(1.8 + Math.random(), mats.leaves);
-  canopy.position.set(x, h + 1.2, z);
-  canopy.userData.isGrabbable = true;
-  scene.add(canopy);
-  platforms.push(canopy);
-}
+        // Controller Models
+        const handGeo = new THREE.BoxGeometry(0.08, 0.08, 0.15);
+        const handMat1 = new THREE.MeshStandardMaterial({ color: 0x00ffff, wireframe: true });
+        const handMat2 = new THREE.MeshStandardMaterial({ color: 0xff00ff, wireframe: true });
+        const rightHandMesh = new THREE.Mesh(handGeo, handMat1);
+        const leftHandMesh = new THREE.Mesh(handGeo, handMat2);
+        controller1.add(rightHandMesh);
+        controller2.add(leftHandMesh);
 
-const treePositions = [
-  [3, -8], [-4, -10], [8, -12], [-8, -7], [0, -15],
-  [12, 8], [-12, 10], [6, 12], [-6, 15], [15, -5],
-  [-15, -8], [0, 20], [10, 18], [-10, 18], [5, -18],
-  [18, 2], [-18, -2], [2, -20], [-2, 20], [14, 14],
-];
-for (const [x, z] of treePositions) {
-  addTree(x, z, 5 + Math.random() * 5);
-}
+        // VR Locomotion State
+        let vrVelocity = new THREE.Vector3();
+        let vrDirection = new THREE.Vector3();
 
-// ─── Rocks ────────────────────────────────────────────────────────────────────
-for (let i = 0; i < 30; i++) {
-  const rock = sph(0.3 + Math.random() * 0.5, mats.rock);
-  const rx = (Math.random() - 0.5) * 40;
-  const rz = (Math.random() - 0.5) * 40;
-  rock.position.set(rx, 0.2, rz);
-  rock.scale.y = 0.6 + Math.random() * 0.4;
-  rock.scale.x = 0.7 + Math.random() * 0.6;
-  rock.userData.isGrabbable = true;
-  scene.add(rock);
-  platforms.push(rock);
-}
+        // Grabbing System
+        let grabbedObject = null;
+        let grabConstraint = null;
+        let grabHand = null;
+        let previousHandPos = new THREE.Vector3();
+        let handVelocity = new THREE.Vector3();
 
-// ─── Gorilla body (player avatar hands) ───────────────────────────────────────
-// Hands / fists — attached to XR controllers
-const handGeo = new THREE.BoxGeometry(0.08, 0.08, 0.1);
-const handL = new THREE.Mesh(handGeo, mats.hand);
-const handR = new THREE.Mesh(handGeo, mats.hand);
-scene.add(handL, handR);
+        function handleGrabStart(controller) {
+            // Find nearest object
+            let nearestDist = 0.5; // Grab range
+            let nearestObj = null;
+            let nearestId = null;
+            
+            const ctrlWorldPos = new THREE.Vector3();
+            controller.getWorldPosition(ctrlWorldPos);
 
-// ─── XR Controllers ───────────────────────────────────────────────────────────
-const ctrlL = renderer.xr.getController(0);
-const ctrlR = renderer.xr.getController(1);
-playerRig.add(ctrlL, ctrlR);
+            for (let id in networkObjects) {
+                const obj = networkObjects[id];
+                const dist = obj.mesh.position.distanceTo(ctrlWorldPos);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestObj = obj;
+                    nearestId = id;
+                }
+            }
 
-const gripL = renderer.xr.getControllerGrip(0);
-const gripR = renderer.xr.getControllerGrip(1);
-playerRig.add(gripL, gripR);
+            if (nearestObj) {
+                grabbedObject = nearestObj;
+                grabHand = controller;
+                
+                // Set Ownership
+                grabbedObject.owner = myPeerId;
+                broadcast({ type: 'OWN', objId: nearestId, owner: myPeerId });
 
-// ─── Physics / locomotion state ───────────────────────────────────────────────
-const gravity = -14;
-const velY = { val: 0 };
-let onGround = false;
-const playerHeight = 1.65;
+                // Attach visually and disable physics temporarily
+                world.removeBody(grabbedObject.body);
+            }
+        }
 
-// Grab state per hand
-const grabState = {
-  left:  { active: false, grabWorldPos: new THREE.Vector3(), handPrevWorld: new THREE.Vector3() },
-  right: { active: false, grabWorldPos: new THREE.Vector3(), handPrevWorld: new THREE.Vector3() },
-};
+        function handleGrabEnd() {
+            if (grabbedObject) {
+                // Re-enable physics
+                world.addBody(grabbedObject.body);
+                grabbedObject.body.position.copy(grabbedObject.mesh.position);
+                grabbedObject.body.quaternion.copy(grabbedObject.mesh.quaternion);
+                
+                // Apply throwing velocity
+                grabbedObject.body.velocity.set(handVelocity.x * 30, handVelocity.y * 30, handVelocity.z * 30);
+                
+                grabbedObject = null;
+                grabHand = null;
+            }
+        }
 
-// Velocity for arm-pumping locomotion
-const velocity = new THREE.Vector3();
-const tmpVec = new THREE.Vector3();
-const prevPosL = new THREE.Vector3();
-const prevPosR = new THREE.Vector3();
-const worldPosL = new THREE.Vector3();
-const worldPosR = new THREE.Vector3();
+        // Controller Events (VR)
+        controller1.addEventListener('squeezestart', () => handleGrabStart(controller1)); // Right Grip
+        controller1.addEventListener('squeezeend', handleGrabEnd);
+        
+        // Spawn Object
+        controller1.addEventListener('selectstart', () => { // Right Trigger
+            const pos = new THREE.Vector3();
+            controller1.getWorldPosition(pos);
+            const dir = new THREE.Vector3(0, 0, -1);
+            dir.applyQuaternion(controller1.quaternion);
+            
+            const spawnPos = pos.clone().add(dir.multiplyScalar(1.0)); // Spawn 1m in front
+            const objId = 'obj_' + Math.random().toString(36).substr(2, 9);
+            const color = Math.random() * 0xffffff;
+            spawnPhysicalBox(objId, spawnPos.x, spawnPos.y, spawnPos.z, color, true);
+        });
 
-// Raycaster for ground check
-const downRay = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 3);
+        // Desktop Events
+        document.addEventListener('mousedown', (e) => {
+            if(!isDesktop || !desktopControls.isLocked) return;
+            
+            if (e.button === 0) { // Left Click - Spawn
+                const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                const pos = camera.position.clone().add(dir.multiplyScalar(2));
+                const objId = 'obj_' + Math.random().toString(36).substr(2, 9);
+                const color = Math.random() * 0xffffff;
+                spawnPhysicalBox(objId, pos.x, pos.y, pos.z, color, true);
+            }
+            if (e.button === 2) { // Right click - simple throw forward of nearest obj
+                 let nearestDist = 3.0; 
+                 let nearestObj = null;
+                 for (let id in networkObjects) {
+                     const obj = networkObjects[id];
+                     const dist = obj.mesh.position.distanceTo(camera.position);
+                     if (dist < nearestDist) { nearestDist = dist; nearestObj = obj; }
+                 }
+                 if(nearestObj) {
+                     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                     nearestObj.body.position.copy(camera.position).add(dir.multiplyScalar(1));
+                     nearestObj.body.velocity.copy(dir.multiplyScalar(15));
+                 }
+            }
+        });
 
-// ─── Controller event helpers ─────────────────────────────────────────────────
-function getHandSide(ctrl) {
-  // controller index 0 = left, 1 = right on Quest
-  return ctrlL === ctrl ? 'left' : 'right';
-}
+        // ==========================================
+        // 4. MULTIPLAYER (PEERJS)
+        // ==========================================
+        const peer = new Peer(null, { debug: 2 });
+        let myPeerId = null;
+        let isHost = false;
+        let hostConnection = null;
+        const connections = {}; // For host: connected clients
+        const remotePlayers = {}; // id -> Group
 
-function onSelectStart(e) {
-  // squeeze/grip starts a grab
-}
+        const uiMyId = document.getElementById('my-id');
+        const uiStatus = document.getElementById('conn-status');
 
-function onGrip(ctrl, pressed) {
-  const side = getHandSide(ctrl);
-  const gs = grabState[side];
-  const grip = side === 'left' ? gripL : gripR;
+        peer.on('open', (id) => {
+            myPeerId = id;
+            uiMyId.innerText = id;
+            isHost = true; // Default to host unless we join someone
+            uiStatus.innerText = "Ready (Host)";
+            uiStatus.style.color = "#0f0";
+        });
 
-  if (pressed) {
-    // Check if near a grabbable surface
-    grip.getWorldPosition(worldPosL); // reuse worldPosL temporarily
-    const grabPos = worldPosL.clone();
+        // When someone joins US (We are host)
+        peer.on('connection', (conn) => {
+            setupConnection(conn);
+            conn.on('open', () => {
+                // Send current state to new player
+                const state = { type: 'FULL_STATE', objects: [] };
+                for (let id in networkObjects) {
+                    const obj = networkObjects[id];
+                    state.objects.push({
+                        id, pos: obj.body.position.toArray(), 
+                        color: obj.mesh.material.color.getHex()
+                    });
+                }
+                conn.send(state);
+            });
+        });
 
-    // Find nearest grabbable
-    let nearest = null, nearestDist = 0.6; // grab radius
-    for (const obj of platforms) {
-      if (!obj.userData.isGrabbable) continue;
-      obj.getWorldPosition(tmpVec);
-      const dist = grabPos.distanceTo(tmpVec);
-      // for box-shaped platforms use a generous check
-      const obb = 1.5; // rough extend
-      if (dist < nearestDist + obb) {
-        nearest = obj;
-        nearestDist = dist;
-      }
-    }
-    // Also grab ground
-    if (grabPos.y < 1.0) nearest = ground;
+        // Join Button Logic (We become client)
+        document.getElementById('join-btn').addEventListener('click', () => {
+            const hostId = document.getElementById('friend-id').value.trim();
+            if (hostId && hostId !== myPeerId) {
+                isHost = false;
+                uiStatus.innerText = "Connecting...";
+                uiStatus.style.color = "#ff0";
+                
+                const conn = peer.connect(hostId);
+                hostConnection = conn;
+                setupConnection(conn);
+            }
+        });
 
-    if (nearest) {
-      gs.active = true;
-      gs.grabWorldPos.copy(grabPos);
-      grip.getWorldPosition(gs.handPrevWorld);
-    }
-  } else {
-    if (gs.active) {
-      // On release: give velocity from last hand movement
-      // already accumulated in velocity
-    }
-    gs.active = false;
-  }
-}
+        function setupConnection(conn) {
+            connections[conn.peer] = conn;
+            createRemotePlayer(conn.peer);
 
-// Map squeeze buttons
-ctrlL.addEventListener('squeezestart', () => onGrip(ctrlL, true));
-ctrlL.addEventListener('squeezeend',   () => onGrip(ctrlL, false));
-ctrlR.addEventListener('squeezestart', () => onGrip(ctrlR, true));
-ctrlR.addEventListener('squeezeend',   () => onGrip(ctrlR, false));
+            conn.on('open', () => {
+                uiStatus.innerText = isHost ? `Hosting (${Object.keys(connections).length} connected)` : "Connected to Host";
+                uiStatus.style.color = "#0f0";
+            });
 
-// Also use selectstart/end (trigger) as grab
-ctrlL.addEventListener('selectstart', () => onGrip(ctrlL, true));
-ctrlL.addEventListener('selectend',   () => onGrip(ctrlL, false));
-ctrlR.addEventListener('selectstart', () => onGrip(ctrlR, true));
-ctrlR.addEventListener('selectend',   () => onGrip(ctrlR, false));
+            conn.on('data', (data) => {
+                handleNetworkData(data, conn.peer);
+                // If Host, relay to other clients
+                if (isHost && data.type !== 'FULL_STATE') {
+                    for (let id in connections) {
+                        if (id !== conn.peer && connections[id].open) {
+                            connections[id].send(data);
+                        }
+                    }
+                }
+            });
 
-// ─── Enter VR button ─────────────────────────────────────────────────────────
-btn.addEventListener('click', async () => {
-  if (!navigator.xr) {
-    statusEl.textContent = '⚠ WebXR not available on this browser/device';
-    return;
-  }
-  const supported = await navigator.xr.isSessionSupported('immersive-vr');
-  if (!supported) {
-    statusEl.textContent = '⚠ Immersive VR not supported. Use a Quest browser.';
-    return;
-  }
-  const session = await navigator.xr.requestSession('immersive-vr', {
-    requiredFeatures: ['local-floor'],
-    optionalFeatures: ['hand-tracking', 'bounded-floor'],
-  });
-  renderer.xr.setSession(session);
-  overlay.style.display = 'none';
-});
+            conn.on('close', () => {
+                removeRemotePlayer(conn.peer);
+                delete connections[conn.peer];
+                if(isHost) uiStatus.innerText = `Hosting (${Object.keys(connections).length} connected)`;
+            });
+        }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const _v3 = new THREE.Vector3();
-const _q  = new THREE.Quaternion();
-const _m  = new THREE.Matrix4();
+        function createRemotePlayer(id) {
+            const group = new THREE.Group();
+            
+            // Stylized Head
+            const headMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.35, 0.35, 0.35), 
+                new THREE.MeshStandardMaterial({color: 0x00ffff, emissive: 0x004444})
+            );
+            // Visor
+            const visor = new THREE.Mesh(
+                new THREE.BoxGeometry(0.4, 0.1, 0.1),
+                new THREE.MeshBasicMaterial({color: 0xffffff})
+            );
+            visor.position.set(0, 0, -0.18);
+            headMesh.add(visor);
 
-function rigWorldPos() {
-  return playerRig.position;
-}
+            // Hands
+            const lHand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.15), new THREE.MeshStandardMaterial({color: 0xff00ff}));
+            const rHand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.15), new THREE.MeshStandardMaterial({color: 0x00ffff}));
 
-// ─── Main loop ────────────────────────────────────────────────────────────────
-const clock = new THREE.Clock();
+            group.add(headMesh);
+            group.add(lHand);
+            group.add(rHand);
+            scene.add(group);
 
-renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.05);
-  const t = clock.elapsedTime;
+            remotePlayers[id] = { group, head: headMesh, lHand, rHand };
+        }
 
-  // ── Update hand meshes to grip positions ──
-  gripL.getWorldPosition(worldPosL);
-  gripR.getWorldPosition(worldPosR);
-  handL.position.copy(worldPosL);
-  handR.position.copy(worldPosR);
-  gripL.getWorldQuaternion(_q); handL.quaternion.copy(_q);
-  gripR.getWorldQuaternion(_q); handR.quaternion.copy(_q);
+        function removeRemotePlayer(id) {
+            if (remotePlayers[id]) {
+                scene.remove(remotePlayers[id].group);
+                delete remotePlayers[id];
+            }
+        }
 
-  // ── Arm locomotion ────────────────────────────────────────────────────────
-  // When a hand is grabbing: the world point under the hand stays fixed,
-  // so we MOVE the rig in the opposite direction of hand motion.
+        function broadcast(data) {
+            if (isHost) {
+                // Send to all clients
+                for (let id in connections) {
+                    if (connections[id].open) connections[id].send(data);
+                }
+            } else if (hostConnection && hostConnection.open) {
+                // Send to host (who relays)
+                hostConnection.send(data);
+            }
+        }
 
-  let anyGrab = false;
+        function handleNetworkData(data, senderId) {
+            switch(data.type) {
+                case 'PLAYER_SYNC':
+                    if (remotePlayers[senderId]) {
+                        const rp = remotePlayers[senderId];
+                        rp.head.position.fromArray(data.hP);
+                        rp.head.quaternion.fromArray(data.hQ);
+                        rp.lHand.position.fromArray(data.lP);
+                        rp.lHand.quaternion.fromArray(data.lQ);
+                        rp.rHand.position.fromArray(data.rP);
+                        rp.rHand.quaternion.fromArray(data.rQ);
+                    }
+                    break;
+                case 'SPAWN':
+                    spawnPhysicalBox(data.id, data.pos[0], data.pos[1], data.pos[2], data.color, false);
+                    break;
+                case 'OBJ_SYNC':
+                    if (networkObjects[data.id] && networkObjects[data.id].owner !== myPeerId) {
+                        const obj = networkObjects[data.id];
+                        obj.body.position.fromArray(data.p);
+                        obj.body.quaternion.fromArray(data.q);
+                        obj.body.velocity.fromArray(data.v);
+                    }
+                    break;
+                case 'OWN':
+                    if (networkObjects[data.objId]) {
+                        networkObjects[data.objId].owner = data.owner;
+                    }
+                    break;
+                case 'FULL_STATE':
+                    // Initial load for clients
+                    data.objects.forEach(obj => {
+                        spawnPhysicalBox(obj.id, obj.pos[0], obj.pos[1], obj.pos[2], obj.color, false);
+                    });
+                    break;
+            }
+        }
 
-  for (const side of ['left', 'right']) {
-    const gs = grabState[side];
-    if (!gs.active) continue;
-    anyGrab = true;
+        // ==========================================
+        // 5. MAIN LOOP
+        // ==========================================
+        const clock = new THREE.Clock();
+        let networkTick = 0;
 
-    const grip = side === 'left' ? gripL : gripR;
-    grip.getWorldPosition(_v3);
+        renderer.setAnimationLoop(() => {
+            const dt = clock.getDelta();
 
-    // delta = current hand world pos - previous
-    const delta = _v3.clone().sub(gs.handPrevWorld);
+            // 1. Desktop Locomotion logic
+            if (isDesktop && desktopControls.isLocked) {
+                const speed = 10;
+                vrDirection.set(Number(keys.d) - Number(keys.a), 0, Number(keys.s) - Number(keys.w));
+                vrDirection.normalize();
+                
+                // Apply rotation from camera
+                const euler = new THREE.Euler(0, camera.rotation.y, 0, 'YXZ');
+                vrDirection.applyEuler(euler);
 
-    // Move rig OPPOSITE to hand delta (as if pushing off world)
-    playerRig.position.sub(delta);
+                playerBody.velocity.x = vrDirection.x * speed;
+                playerBody.velocity.z = vrDirection.z * speed;
+                
+                // Map camera to physics body
+                camera.position.copy(playerBody.position);
+                camera.position.y += 0.8; // Eye height offset from sphere center
+            } 
+            // 2. VR Locomotion Logic
+            else if (renderer.xr.isPresenting) {
+                const session = renderer.xr.getSession();
+                if (session && session.inputSources) {
+                    for (const source of session.inputSources) {
+                        if (!source.gamepad) continue;
+                        const axes = source.gamepad.axes;
+                        
+                        // Left Controller - Movement (Axes 2, 3)
+                        if (source.handedness === 'left') {
+                            const x = axes[2];
+                            const y = axes[3];
+                            if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
+                                const speed = 6;
+                                const dir = new THREE.Vector3(x, 0, y);
+                                // Move relative to head rotation
+                                const headRot = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+                                dir.applyEuler(new THREE.Euler(0, headRot.y, 0));
+                                
+                                playerBody.velocity.x = dir.x * speed;
+                                playerBody.velocity.z = dir.z * speed;
+                            }
+                            
+                            // Jump (A/X Button - usually button 4 or 5, checking 4 for generic XR)
+                            if (source.gamepad.buttons[4]?.pressed || source.gamepad.buttons[0]?.pressed) {
+                                if(playerBody.position.y < playerRadius + 0.5 && playerBody.velocity.y < 1) {
+                                    playerBody.velocity.y = 8;
+                                }
+                            }
+                        }
+                        // Right Controller - Snap Turn (Axes 2, 3)
+                        if (source.handedness === 'right') {
+                            // Implement snap turning here if desired, simplified for MVP
+                        }
+                    }
+                }
 
-    // Accumulate velocity from this push (for momentum on release)
-    velocity.sub(delta.multiplyScalar(1 / dt * 0.5));
+                // Sync VR Rig to Physics Body
+                userGroup.position.copy(playerBody.position);
+                userGroup.position.y -= playerRadius; // Offset so rig stands on ground
+            }
 
-    gs.handPrevWorld.copy(_v3);
-  }
+            // Step Physics
+            world.step(1/60, dt, 3);
 
-  // ── Apply velocity & gravity ──────────────────────────────────────────────
-  if (!anyGrab) {
-    // Dampen lateral velocity
-    velocity.x *= 0.88;
-    velocity.z *= 0.88;
-    // Clamp max speed
-    const hspd = Math.sqrt(velocity.x**2 + velocity.z**2);
-    if (hspd > 8) { velocity.x *= 8/hspd; velocity.z *= 8/hspd; }
-  } else {
-    velocity.set(0, 0, 0);
-  }
+            // Handle Grabbed Object Physics Override & Throw Velocity
+            if (grabbedObject && grabHand) {
+                const handWorldPos = new THREE.Vector3();
+                const handWorldQuat = new THREE.Quaternion();
+                grabHand.getWorldPosition(handWorldPos);
+                grabHand.getWorldQuaternion(handWorldQuat);
 
-  // Gravity
-  velocity.y += gravity * dt;
-  playerRig.position.y += velocity.y * dt;
+                grabbedObject.mesh.position.copy(handWorldPos);
+                grabbedObject.mesh.quaternion.copy(handWorldQuat);
+                
+                // Calculate manual velocity for throwing
+                handVelocity.subVectors(handWorldPos, previousHandPos).divideScalar(dt);
+                previousHandPos.copy(handWorldPos);
+            }
 
-  // ── Ground collision ──────────────────────────────────────────────────────
-  // Simple flat ground at y=0; player feet = rig.y
-  if (playerRig.position.y < 0) {
-    playerRig.position.y = 0;
-    velocity.y = 0;
-    onGround = true;
-  } else {
-    onGround = false;
-  }
+            // Sync Objects (Physics -> Graphics)
+            for (let id in networkObjects) {
+                const obj = networkObjects[id];
+                if (obj !== grabbedObject) {
+                    obj.mesh.position.copy(obj.body.position);
+                    obj.mesh.quaternion.copy(obj.body.quaternion);
+                }
+            }
 
-  // Lateral velocity apply
-  playerRig.position.x += velocity.x * dt;
-  playerRig.position.z += velocity.z * dt;
+            // Network Broadcasting (Rate limited ~20Hz)
+            networkTick += dt;
+            if (networkTick > 0.05) {
+                networkTick = 0;
 
-  // ── Platform collision (simple AABB y-check) ──────────────────────────────
-  for (const plat of platforms) {
-    if (!plat.userData.isGrabbable) continue;
-    const pp = new THREE.Vector3();
-    plat.getWorldPosition(pp);
-    const dx = Math.abs(playerRig.position.x - pp.x);
-    const dz = Math.abs(playerRig.position.z - pp.z);
-    const geo = plat.geometry;
-    const params = geo.parameters || {};
-    const hw = (params.width || params.radiusTop || 0.5) * 0.5 + 0.3;
-    const hd = (params.depth || params.radiusTop || 0.5) * 0.5 + 0.3;
-    const ht = (params.height || 0.4) * 0.5;
-    if (dx < hw + 0.2 && dz < hd + 0.2) {
-      const platTop = pp.y + ht;
-      if (playerRig.position.y < platTop + 0.3 && playerRig.position.y > platTop - 0.8) {
-        playerRig.position.y = platTop;
-        velocity.y = 0;
-        onGround = true;
-      }
-    }
-  }
+                // Sync Local Player Avatar
+                if (myPeerId) {
+                    const hP = new THREE.Vector3(); const hQ = new THREE.Quaternion();
+                    const lP = new THREE.Vector3(); const lQ = new THREE.Quaternion();
+                    const rP = new THREE.Vector3(); const rQ = new THREE.Quaternion();
 
-  // ── Animate leaves swaying ────────────────────────────────────────────────
-  // (subtle, skip for perf in VR)
+                    camera.getWorldPosition(hP); camera.getWorldQuaternion(hQ);
+                    controller2.getWorldPosition(lP); controller2.getWorldQuaternion(lQ);
+                    controller1.getWorldPosition(rP); controller1.getWorldQuaternion(rQ);
 
-  renderer.render(scene, camera);
-});
+                    broadcast({
+                        type: 'PLAYER_SYNC',
+                        hP: hP.toArray(), hQ: hQ.toArray(),
+                        lP: lP.toArray(), lQ: lQ.toArray(),
+                        rP: rP.toArray(), rQ: rQ.toArray()
+                    });
+                }
 
-// ─── Non-XR preview (mouse look on desktop) ───────────────────────────────────
-let mouseX = 0, mouseY = 0;
-document.addEventListener('mousemove', e => {
-  if (!renderer.xr.isPresenting) {
-    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
-    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
-  }
-});
-</script>
+                // Sync owned objects
+                for (let id in networkObjects) {
+                    const obj = networkObjects[id];
+                    // Host syncs everything unowned, clients sync what they own (grabbed)
+                    if (obj.owner === myPeerId || (isHost && obj.owner === null)) {
+                        // Sleep check optimization
+                        if (obj.body.velocity.lengthSquared() > 0.01 || obj === grabbedObject) {
+                            broadcast({
+                                type: 'OBJ_SYNC',
+                                id: id,
+                                p: obj.mesh.position.toArray(),
+                                q: obj.mesh.quaternion.toArray(),
+                                v: obj.body.velocity.toArray()
+                            });
+                        }
+                    }
+                }
+            }
 
+            renderer.render(scene, camera);
+        });
+
+        // Window Resizing
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Prevent context menu on right click
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+    </script>
 </body>
 </html>
